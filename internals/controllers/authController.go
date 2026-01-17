@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"gin-auth/internals/initializers"
 	"gin-auth/internals/models"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 func Signup(c *gin.Context) {
@@ -23,7 +25,13 @@ func Signup(c *gin.Context) {
 		return
 	}
 
-	hash, _ := bcrypt.GenerateFromPassword([]byte(body.Password), 10)
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 10)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to hash password"})
+		return
+	}
+
 	user := models.User{Email: body.Email, Password: string(hash)}
 	result := initializers.DB.Create(&user)
 
@@ -43,14 +51,22 @@ func Login(c *gin.Context) {
 
 	c.Bind(&body)
 
-	var user models.User
-	initializers.DB.First(&user, "email = ?", body.Email)
+	var user models.User // initialize an empty user struct with values set to their zero values
+	result := initializers.DB.First(&user, "email = ?", body.Email)
 
-	if user.ID == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+	if result.Error != nil {
+		// Specifically check if the error is "Record Not Found"
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+			return
+		}
+
+		// Handle other possible database errors (connection lost, etc.)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
 
+	// Compare the provided password with the hashed password in the database
 	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password))
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
@@ -67,7 +83,7 @@ func Login(c *gin.Context) {
 
 	// Set Cookie (Optional but recommended for browsers)
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", tokenString, 3600*24*30, "", "", false, true)
+	c.SetCookie("Authorization", tokenString, 3600*24*30, "", "", false, true) // set secure to true in production
 
 	c.JSON(http.StatusOK, gin.H{"token": tokenString})
 }

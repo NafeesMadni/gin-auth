@@ -26,6 +26,7 @@ func main() {
 
 	r.POST("/signup", controllers.Signup)
 	r.POST("/login", controllers.Login)
+
 	r.GET("/validate", middleware.RequireAuth, func(c *gin.Context) {
 		user, _ := c.Get("user")
 		c.JSON(http.StatusOK, gin.H{"message": "Logged in!", "user": user})
