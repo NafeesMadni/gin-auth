@@ -18,6 +18,8 @@ func init() {
 
 	initializers.ConnectToDb()
 	initializers.SyncDatabase()
+
+	initializers.StartBlacklistCleanup()
 }
 func main() {
 	r := gin.Default()
