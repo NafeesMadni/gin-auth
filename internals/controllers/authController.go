@@ -6,6 +6,7 @@ import (
 	"gin-auth/internals/models"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -85,13 +86,19 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	expStr := os.Getenv("JWT_EXPIRATION_SECONDS")
+	expSeconds, err := strconv.Atoi(expStr)
+	if err != nil {
+		expSeconds = 86400 // Default to 24 hours if .env is missing
+	}
+
 	tokenID := uuid.New().String()
 
 	// Create JWT Token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": user.ID,
 		"jti": tokenID,
-		"exp": time.Now().Add(time.Hour * 24 * 30).Unix(),
+		"exp": time.Now().Add(time.Duration(expSeconds) * time.Second).Unix(),
 	})
 
 	tokenString, err := token.SignedString([]byte(os.Getenv("SECRET")))
