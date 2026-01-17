@@ -11,4 +11,5 @@ var DB *gorm.DB
 
 func SyncDatabase() {
 	DB.AutoMigrate(&models.User{})
+	DB.AutoMigrate(&models.Blacklist{})
 }

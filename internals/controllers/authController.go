@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -62,7 +63,8 @@ func Login(c *gin.Context) {
 	c.Bind(&body)
 
 	var user models.User // initialize an empty user struct with values set to their zero values
-	result := initializers.DB.First(&user, "email = ?", body.Email)
+
+	result := initializers.DB.Where("email = ?", body.Email).First(&user)
 
 	if result.Error != nil {
 		// Specifically check if the error is "Record Not Found"
@@ -83,9 +85,12 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	tokenID := uuid.New().String()
+
 	// Create JWT Token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": user.ID,
+		"jti": tokenID,
 		"exp": time.Now().Add(time.Hour * 24 * 30).Unix(),
 	})
 
@@ -93,7 +98,32 @@ func Login(c *gin.Context) {
 
 	// Set Cookie (Optional but recommended for browsers)
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", tokenString, 3600*24*30, "", "", false, true) // set secure to true in production
+	c.SetCookie("Authorization", tokenString, 3600*24, "", "", false, true) // set secure to true in production
 
 	c.JSON(http.StatusOK, gin.H{"token": tokenString})
+}
+
+func Logout(c *gin.Context) {
+	tokenString, err := c.Cookie("Authorization")
+
+	if err != nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	token, _ := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	})
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		jti, ok := claims["jti"].(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid token format"})
+			return
+		}
+		initializers.DB.Create(&models.Blacklist{Jti: jti})
+	}
+
+	c.SetCookie("Authorization", "", -1, "", "", false, true)
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }

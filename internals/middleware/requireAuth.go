@@ -24,6 +24,17 @@ func RequireAuth(c *gin.Context) {
 	})
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		jti := claims["jti"].(string)
+
+		// Check if this JTI exists in the Blacklist table
+		var blacklisted models.Blacklist
+		initializers.DB.Where("jti = ?", jti).First(&blacklisted)
+
+		if blacklisted.ID != 0 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token is invalid (logged out)"})
+			return
+		}
+
 		if float64(time.Now().Unix()) > claims["exp"].(float64) {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
@@ -39,6 +50,7 @@ func RequireAuth(c *gin.Context) {
 
 		c.Set("user", user)
 		c.Next() // continue to the next handler
+
 	} else {
 		c.AbortWithStatus(http.StatusUnauthorized)
 	}
