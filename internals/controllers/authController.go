@@ -14,6 +14,16 @@ import (
 	"gorm.io/gorm"
 )
 
+func Validate(c *gin.Context) {
+	// get user from context (which was set in middleware)
+	user, _ := c.Get("user")
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "You are logged in!",
+		"user":    user,
+	})
+}
+
 func Signup(c *gin.Context) {
 	var body struct {
 		Email    string
