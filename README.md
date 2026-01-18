@@ -89,12 +89,14 @@ go run main.go
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/signup` | Create a new user account |
-| `POST` | `/login` | Authenticate and receive a JWT |
-| `GET` | `/auth/google/login` | Redirect to Google for OAuth |
-| `GET` | `/auth/google/callback` | Handle Google OAuth response |
-| `POST` | `/logout` | Revoke current token (Blacklist) |
-| `GET` | `/validate` | Check if session is valid (Protected) |
+| `GET` | `/` | **System Status**: Returns a 200 OK or API metadata (Health Check). |
+| `POST` | `/signup` | Creates a new user account and hashes the password. |
+| `POST` | `/login` | Validates credentials, creates a new **Session**, and issues JWT cookies. |
+| `GET` | `/auth/google/login` | Initiates the Google OAuth2 flow by redirecting the user. |
+| `GET` | `/auth/google/callback` | Exchanges Google auth code for user info and issues local session tokens. |
+| `POST` | `/auth/refresh` | Rotates Session: Deletes old Refresh Token and issues a fresh token pair. |
+| `POST` | `/logout` | **Revocation**: Deletes the DB session and blacklists the current Access Token. |
+| `GET` | `/validate` | Middleware-protected route to verify the active Authorization token. |
 
 ---
 

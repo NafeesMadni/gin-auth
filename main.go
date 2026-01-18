@@ -29,7 +29,9 @@ func main() {
 	{
 		public.GET("/", func(c *gin.Context) {
 			c.JSON(200, gin.H{
-				"message": "Welcome to the Gin Auth API",
+				"status":      "active",
+				"environment": "development",
+				"message":     "Gin-Auth API is running",
 			})
 		})
 		r.POST("/signup", controllers.Signup)
