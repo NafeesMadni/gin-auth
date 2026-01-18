@@ -37,6 +37,7 @@ func main() {
 		})
 		r.POST("/signup", controllers.Signup)
 		r.POST("/verify", controllers.VerifyEmail)
+		r.POST("/resend-code", controllers.ResendVerificationCode)
 		r.POST("/login", controllers.Login)
 	}
 

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -58,12 +57,8 @@ func Signup(c *gin.Context) {
 		return
 	}
 
-	// Generate a 6-digit verification code
-	code := fmt.Sprintf("%06d", rand.Intn(1000000))
-	expirationMinutes, err := strconv.Atoi(os.Getenv("VERIFICATION_EXPIRATION_MINUTES"))
-	if err != nil || expirationMinutes <= 0 {
-		expirationMinutes = 10 // Default to 10 minutes if not set or invalid
-	}
+	code := utils.GenerateVerificationCode()
+	expirationMinutes := utils.GetVerificationExpirationMinutes()
 
 	newUser := models.User{
 		Email:            body.Email,
@@ -118,13 +113,56 @@ func VerifyEmail(c *gin.Context) {
 		return
 	}
 
-	// 3. Mark as verified
+	// Mark as verified
 	initializers.DB.Model(&user).Updates(map[string]interface{}{
 		"IsVerified":       true,
 		"VerificationCode": "", // Clear the code after use
 	})
 
 	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
+}
+
+func ResendVerificationCode(c *gin.Context) {
+	var body struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+
+	if c.ShouldBindJSON(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email address"})
+		return
+	}
+
+	var user models.User
+	if err := initializers.DB.Where("email = ?", body.Email).First(&user).Error; err != nil {
+		// Security: Use a generic success message to prevent account enumeration
+		// This way, attackers cannot determine if an email is registered or not
+		c.JSON(http.StatusOK, gin.H{"message": "If this email is registered, a new code has been sent."})
+		return
+	}
+
+	if user.IsVerified {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Account is already verified"})
+		return
+	}
+
+	// --- COOLDOWN LOGIC ---
+	// Check if the last code was sent less than 1 minute ago
+	if time.Now().Before(user.UpdatedAt.Add(1 * time.Minute)) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Please wait a minute before requesting a new code"})
+		return
+	}
+
+	newCode := utils.GenerateVerificationCode()
+	expirationMinutes := utils.GetVerificationExpirationMinutes()
+
+	initializers.DB.Model(&user).Updates(models.User{
+		VerificationCode: newCode,
+		CodeExpiresAt:    time.Now().Add(time.Duration(expirationMinutes) * time.Minute),
+	})
+
+	go utils.SendVerificationEmail(user.Email, newCode)
+
+	c.JSON(http.StatusOK, gin.H{"message": "A new verification code has been sent to your email"})
 }
 
 func Login(c *gin.Context) {
