@@ -5,8 +5,11 @@ import (
 	"gin-auth/internals/initializers"
 	"gin-auth/internals/models"
 	"gin-auth/internals/utils"
+	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -84,13 +87,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Generate tokens and set cookies
-	accCookieConfig := utils.CookieConfig{}
-	refCookieConfig := utils.CookieConfig{
-		Path: "/auth/refresh",
-	}
-
-	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID, accCookieConfig, refCookieConfig)
+	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
@@ -101,26 +98,94 @@ func Login(c *gin.Context) {
 }
 
 func Logout(c *gin.Context) {
-	tokenString, err := c.Cookie("Authorization")
+	acctokenStr, accErr := c.Cookie("Authorization")
+	reftokenStr, refErr := c.Cookie("RefreshToken")
+
+	// If both are missing, the user is already "logged out"
+	if accErr != nil && refErr != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "Already logged out"})
+		return
+	}
+
+	// 1. Target the session for immediate revocation via the Refresh Token string.
+	// 2. Fallback Logic: If the token is invalid/tampered, the query fails to find a match.
+	// 3. Fail-safe: The Background Janitor acts as the ultimate source of truth,
+	//    deleting any session by expiration date, regardless of the token's validity.
+	if reftokenStr != "" {
+		// Unscoped(): permanently remove the session record
+		initializers.DB.Unscoped().Where("refresh_token = ?", reftokenStr).Delete(&models.Session{})
+	}
+
+	// Blacklist the access token
+	if acctokenStr != "" {
+		token, _ := jwt.Parse(acctokenStr, func(t *jwt.Token) (interface{}, error) {
+			return []byte(os.Getenv("SECRET")), nil
+		})
+
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+
+			if jti, ok := claims["jti"].(string); ok {
+
+				// In jwt-go, numbers are parsed as float64 by default
+				var expireAt time.Time
+				if exp, ok := claims["exp"].(float64); ok {
+					expireAt = time.Unix(int64(exp), 0)
+				} else {
+					expSeconds, err := strconv.Atoi(os.Getenv("JWT_EXPIRATION_SECONDS"))
+					if err != nil {
+						expSeconds = 86400 // Default to 24 hours if .env is missing
+					}
+					// Fallback: If exp is missing, set a safe default (e.g., 24 hours from now)
+					expireAt = time.Now().Add(time.Duration(expSeconds) * time.Second)
+				}
+
+				// 2. Create the Blacklist entry with the expiration date
+				initializers.DB.Create(&models.Blacklist{
+					Jti:       jti,
+					ExpiresAt: expireAt,
+				})
+			}
+		}
+	}
+	utils.SetClearCookies(c)
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+}
+
+func RefreshToken(c *gin.Context) {
+	refreshTokenStr, err := c.Cookie("RefreshToken")
 
 	if err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
-	token, _ := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("SECRET")), nil
-	})
-
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		jti, ok := claims["jti"].(string)
-		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid token format"})
-			return
-		}
-		initializers.DB.Create(&models.Blacklist{Jti: jti})
+	// Find the session in the DB
+	var session models.Session
+	if err := initializers.DB.Where("refresh_token = ?", refreshTokenStr).First(&session).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session not found or revoked"})
+		return
 	}
 
-	c.SetCookie("Authorization", "", -1, "", "", false, true)
-	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+	// Check if session is expired
+	if time.Now().After(session.ExpiresAt) {
+		initializers.DB.Unscoped().Delete(&session) // Clean up expired session
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired"})
+		return
+	}
+
+	// ROTATION: Delete the old session and create a new one
+	initializers.DB.Unscoped().Delete(&session)
+
+	tokens, err := utils.GenerateAndSetToken(c, session.UserID)
+
+	if err != nil {
+		log.Printf("Rotation Failure for User %d: %v", session.UserID, err)
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Session rotation failed. Please log in again.",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Token refreshed", "access_token": tokens.AccessToken})
 }

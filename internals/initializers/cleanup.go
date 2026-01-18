@@ -16,23 +16,27 @@ func StartBlacklistCleanup() {
 	}
 	ticker := time.NewTicker(time.Duration(cleanupInterval) * time.Minute)
 
-	expStr := os.Getenv("JWT_EXPIRATION_SECONDS")
-	expSeconds, err := strconv.Atoi(expStr)
-	if err != nil {
-		expSeconds = 86400 // Default to 24 hours if .env is missing
-	}
-
 	go func() {
 		for range ticker.C {
-			cutoff := time.Now().Add(time.Duration(-expSeconds) * time.Second)
 
-			// Permanent delete: By default, GORM uses Soft Deletes. If you just called .Delete(), GORM would simply put a timestamp in a deleted_at column.
-			result := DB.Unscoped().Where("created_at < ?", cutoff).Delete(&models.Blacklist{})
+			// We use Unscoped() to perform a 'Hard Delete' (physical removal), bypassing GORM's
+			// default Soft Delete (deleted_at) to prevent the database from growing indefinitely.
 
-			if result.RowsAffected > 0 {
-				log.Printf("Blacklist Cleanup: Removed %d expired tokens", result.RowsAffected)
+			// 1. Purge Expired Sessions
+			// This catches tokens that were tampered with,
+			// ignored during logout, or simply left to expire.
+			sessionResult := DB.Unscoped().Where("expires_at < ?", time.Now()).Delete(&models.Session{})
+
+			// 2. Purge expired JTI entries from the Blacklist.
+			// Logic: If ExpiresAt is less than the current time, the JTI is no longer
+			// needed because the token would have expired naturally by now.
+			blacklistResult := DB.Unscoped().Where("expires_at < ?", time.Now()).Delete(&models.Blacklist{})
+
+			if sessionResult.RowsAffected > 0 || blacklistResult.RowsAffected > 0 {
+				log.Printf("Janitor: Cleaned %d sessions and %d blacklisted tokens",
+					sessionResult.RowsAffected, blacklistResult.RowsAffected)
 			} else {
-				log.Printf("Blacklist Cleanup: No expired tokens found")
+				log.Printf("Janitor: No expired tokens found")
 			}
 		}
 	}()
