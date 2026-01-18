@@ -8,6 +8,7 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 
 * **Secure Authentication:** Standard Signup/Login with password hashing.
 * **Email Verification:** Integration with Gmail SMTP to verify user accounts via OTP.
+* **Signup Collision Handling:** Prevents duplicate accounts while providing clear instructions for existing verified or unverified users.
 * **Google OAuth2 Integration:** Seamless social login via Google.
 * **Refresh Token Rotation:** High-security session management that rotates tokens on every refresh.
 * **Hybrid Logout & Revocation:** Supports both stateful session deletion and stateless JTI blacklisting.
@@ -116,8 +117,9 @@ go run main.go
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/` | Returns a 200 OK or API metadata (Health Check). |
-| `POST` | `/signup` | Creates a new user account and sends a 6-digit verification code. |
-| `POST` | `/verify` | Validates the email OTP code and activates the user account. |
+| `POST` | `/signup` | **Signup**: Creates account and sends OTP. Prevents collisions with existing users. |
+| `POST` | `/verify` | **Activation**: Validates the email OTP code and activates the user account. |
+| `POST` | `/resend-code` | **Utility**: Sends a new OTP code if the previous one expired or was lost (1-min cooldown). |
 | `POST` | `/login` | Authenticates verified users and issues stateful session cookies. |
 | `GET` | `/auth/google/login` | Initiates the Google OAuth2 flow. |
 | `GET` | `/auth/google/callback` | Handles Google response and issues local session tokens. |
@@ -133,7 +135,7 @@ The project includes an automated **Background Janitor** that ensures the SQLite
 
 * **Session Purge:** Permanently deletes rows in the `sessions` table where `expires_at < now`.
 * **Blacklist Purge:** Removes entries in the `blacklists` table once the Access Token's natural lifespan has ended.
-* **User Cleanup:** Removes unverified accounts that have not completed the email verification flow within 24 hours.
+* **User Cleanup:** Removes unverified accounts that have not completed the email verification flow within 24 hours to prevent "ghost" account bloat.
 
 ---
 
