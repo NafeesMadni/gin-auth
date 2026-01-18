@@ -1,11 +1,12 @@
 package initializers
 
 import (
-	"gin-auth/internals/models"
 	"log"
 	"os"
 	"strconv"
 	"time"
+
+	"gin-auth/internals/models"
 )
 
 func StartBlacklistCleanup() {
@@ -32,9 +33,12 @@ func StartBlacklistCleanup() {
 			// needed because the token would have expired naturally by now.
 			blacklistResult := DB.Unscoped().Where("expires_at < ?", time.Now()).Delete(&models.Blacklist{})
 
-			if sessionResult.RowsAffected > 0 || blacklistResult.RowsAffected > 0 {
-				log.Printf("Janitor: Cleaned %d sessions and %d blacklisted tokens",
-					sessionResult.RowsAffected, blacklistResult.RowsAffected)
+			// 3. Purge unverified users older than a certain threshold (e.g., 24 Hours)
+			userResult := DB.Unscoped().Where("is_verified = ? AND created_at < ?", false, time.Now().Add(-24*time.Hour)).Delete(&models.User{})
+
+			if sessionResult.RowsAffected > 0 || blacklistResult.RowsAffected > 0 || userResult.RowsAffected > 0 {
+				log.Printf("Janitor: Cleaned %d sessions and %d blacklisted tokens and %d unverified users",
+					sessionResult.RowsAffected, blacklistResult.RowsAffected, userResult.RowsAffected)
 			} else {
 				log.Printf("Janitor: No expired tokens found")
 			}

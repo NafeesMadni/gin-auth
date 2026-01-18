@@ -2,14 +2,17 @@ package controllers
 
 import (
 	"errors"
-	"gin-auth/internals/initializers"
-	"gin-auth/internals/models"
-	"gin-auth/internals/utils"
+	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
+
+	"gin-auth/internals/initializers"
+	"gin-auth/internals/models"
+	"gin-auth/internals/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -39,21 +42,78 @@ func Signup(c *gin.Context) {
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 10)
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to hash password"})
 		return
 	}
 
-	user := models.User{Email: body.Email, Password: string(hash)}
-	result := initializers.DB.Create(&user)
+	// Generate a 6-digit verification code
+	code := fmt.Sprintf("%06d", rand.Intn(1000000))
+	expirationMinutes, err := strconv.Atoi(os.Getenv("VERIFICATION_EXPIRATION_MINUTES"))
+	if err != nil || expirationMinutes <= 0 {
+		expirationMinutes = 10 // Default to 10 minutes if not set or invalid
+	}
+
+	newUser := models.User{
+		Email:            body.Email,
+		Password:         string(hash),
+		VerificationCode: code,
+		CodeExpiresAt:    time.Now().Add(time.Duration(expirationMinutes) * time.Minute),
+	}
+
+	result := initializers.DB.Create(&newUser)
 
 	if result.Error != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create user"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User created"})
+	// Send the email in a background goroutine so the response isn't slow
+	go utils.SendVerificationEmail(newUser.Email, code)
+
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Please check your email for the verification code. The code will expires in %d minutes.", expirationMinutes)})
+}
+
+func VerifyEmail(c *gin.Context) {
+	var body struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+
+	if c.Bind(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read body"})
+		return
+	}
+
+	var user models.User
+	if err := initializers.DB.Where("email = ?", body.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User not found"})
+		return
+	}
+
+	if user.IsVerified {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email already verified"})
+		return
+	}
+
+	// Check if expired
+	if time.Now().After(user.CodeExpiresAt) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Code expired"})
+		return
+	}
+
+	if user.VerificationCode != body.Code {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid code"})
+		return
+	}
+
+	// 3. Mark as verified
+	initializers.DB.Model(&user).Updates(map[string]interface{}{
+		"IsVerified":       true,
+		"VerificationCode": "", // Clear the code after use
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
 }
 
 func Login(c *gin.Context) {
@@ -71,7 +131,7 @@ func Login(c *gin.Context) {
 	if result.Error != nil {
 		// Specifically check if the error is "Record Not Found"
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Please enter a valid email address"})
 			return
 		}
 
@@ -83,12 +143,16 @@ func Login(c *gin.Context) {
 	// Compare the provided password with the hashed password in the database
 	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password))
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Please enter a valid password"})
+		return
+	}
+
+	if !user.IsVerified {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Email is not verified"})
 		return
 	}
 
 	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID)
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
 		return
@@ -123,7 +187,6 @@ func Logout(c *gin.Context) {
 		})
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-
 			if jti, ok := claims["jti"].(string); ok {
 
 				// In jwt-go, numbers are parsed as float64 by default
@@ -153,7 +216,6 @@ func Logout(c *gin.Context) {
 
 func RefreshToken(c *gin.Context) {
 	refreshTokenStr, err := c.Cookie("RefreshToken")
-
 	if err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
@@ -177,7 +239,6 @@ func RefreshToken(c *gin.Context) {
 	initializers.DB.Unscoped().Delete(&session)
 
 	tokens, err := utils.GenerateAndSetToken(c, session.UserID)
-
 	if err != nil {
 		log.Printf("Rotation Failure for User %d: %v", session.UserID, err)
 
