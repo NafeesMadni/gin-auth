@@ -1,10 +1,11 @@
 package main
 
 import (
+	"log"
+
 	"gin-auth/internals/controllers"
 	"gin-auth/internals/initializers"
 	"gin-auth/internals/middleware"
-	"log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -35,6 +36,7 @@ func main() {
 			})
 		})
 		r.POST("/signup", controllers.Signup)
+		r.POST("/verify", controllers.VerifyEmail)
 		r.POST("/login", controllers.Login)
 	}
 

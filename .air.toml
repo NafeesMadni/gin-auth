@@ -7,7 +7,7 @@ tmp_dir = "tmp"
   bin = "tmp/main" 
   
   include_ext = ["go"]
-  exclude_dir = ["tmp", "vendor", "node_modules", "docs"]
+  exclude_dir = ["tmp", "vendor", "node_modules", "docs", ".vscode"]
   
   # ADDED: This stops Air from restarting when your database or env changes
   exclude_regex = ["_test.go", ".*\\.db", ".*\\.env", ".*\\.md"]
