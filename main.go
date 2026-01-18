@@ -24,13 +24,29 @@ func init() {
 func main() {
 	r := gin.Default()
 
-	r.POST("/signup", controllers.Signup)
-	r.POST("/login", controllers.Login)
-	r.POST("/logout", middleware.RequireAuth, controllers.Logout)
-	r.GET("/validate", middleware.RequireAuth, controllers.Validate)
+	public := r.Group("/")
+	{
+		public.GET("/", func(c *gin.Context) {
+			c.JSON(200, gin.H{
+				"message": "Welcome to the Gin Auth API",
+			})
+		})
+		r.POST("/signup", controllers.Signup)
+		r.POST("/login", controllers.Login)
+	}
 
-	r.GET("/auth/google/login", controllers.GoogleLogin)
-	r.GET("/auth/google/callback", controllers.GoogleCallback)
+	protected := r.Group("/")
+	protected.Use(middleware.RequireAuth)
+	{
+		protected.POST("/logout", controllers.Logout)
+		protected.GET("/validate", controllers.Validate)
+	}
+
+	auth := r.Group("/auth")
+	{
+		auth.GET("/google/login", controllers.GoogleLogin)
+		auth.GET("/google/callback", controllers.GoogleCallback)
+	}
 
 	r.Run()
 }
