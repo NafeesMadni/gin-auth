@@ -2,9 +2,24 @@ package utils
 
 import (
 	"fmt"
+	"math/rand"
 	"net/smtp"
 	"os"
+	"strconv"
 )
+
+func GenerateVerificationCode() string {
+	return fmt.Sprintf("%06d", rand.Intn(1000000))
+}
+
+func GetVerificationExpirationMinutes() int {
+	expirationStr := os.Getenv("VERIFICATION_EXPIRATION_MINUTES")
+	expiration, err := strconv.Atoi(expirationStr)
+	if err != nil || expiration <= 0 {
+		return 10 // default to 10 minutes if not set or invalid
+	}
+	return expiration
+}
 
 func SendVerificationEmail(toEmail string, code string) error {
 	from := os.Getenv("GMAIL_USER")
