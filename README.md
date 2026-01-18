@@ -47,12 +47,26 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 
 #### 1. Gmail SMTP Setup (Verification Emails)
 
-To enable email verification, you must use a Google **App Password**. Regular passwords will be blocked by Google.
+To enable email verification, you must use a Google **App Password**. Google blocks standard password authentication for SMTP to protect your account.
 
-1. Enable **2-Step Verification** in your [Google Security Settings](https://www.google.com/search?q=https://myaccount.google.com/security).
-2. Navigate to the **App Passwords** section: 👉 **[Generate App Password Here](https://www.google.com/search?q=https://myaccount.google.com/apppasswords)**.
-3. Select `Other (Custom name)` and name it `Gin-Auth-App`.
-4. Copy the **16-character code** and paste it into your `.env` (remove all spaces).
+- **Step 1: Identify your GMAIL_USER** This is your full Gmail address (e.g., nafees@gmail.com). This account will act as the system sender for all verification codes.
+
+- **Step 2: Enable 2-Step Verification** Google requires 2FA to be active before allowing App Passwords.
+   1. Go to your Google Security Settings.
+
+   2. Under "**How you sign in to Google**," ensure **2-Step Verification** is turned **ON**.
+
+- **Step 3: Generate the GMAIL_APP_PASSWORD**   
+   1.  Navigate directly to the **App Passwords** page: 👉 **[Generate App Password Here](https://myaccount.google.com/apppasswords)**.
+
+   2.  Note: If the link doesn't appear, search for "App Passwords" in the search bar at the top of your Google Account page.
+
+   3.  **Select Other (Custom name)**, enter a name like Gin-Auth-App, and click **Create**.
+
+   4.  **Copy the 16-character code**.
+
+   ⚠️ **Critical**: Paste the code into your `.env` file. You will not be able to see this code again once the window is closed.
+
 
 #### 2. Configuration
 
