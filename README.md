@@ -1,7 +1,3 @@
-Here is the updated `README.md`. I have added a dedicated section for the **Gmail SMTP Setup**, updated the **API Endpoints** table to include the new verification route, and improved the **Database Maintenance** section to reflect your new `ExpiresAt` logic.
-
----
-
 ## Gin Auth & OAuth2 Project
 
 This repository contains a robust, production-ready **Go (Gin)** authentication backend. It features standard email/password authentication, Google OAuth2 integration, and a sophisticated session management system with automated background cleanup.
