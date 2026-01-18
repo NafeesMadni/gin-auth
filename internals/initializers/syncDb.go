@@ -10,6 +10,11 @@ import (
 var DB *gorm.DB
 
 func SyncDatabase() {
-	DB.AutoMigrate(&models.User{})
-	DB.AutoMigrate(&models.Blacklist{})
+	err := DB.AutoMigrate(
+		&models.User{},
+		&models.Blacklist{},
+	)
+	if err != nil {
+		panic("Failed to migrate database")
+	}
 }

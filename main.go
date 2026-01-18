@@ -21,6 +21,7 @@ func init() {
 
 	initializers.StartBlacklistCleanup()
 }
+
 func main() {
 	r := gin.Default()
 
