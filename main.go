@@ -29,5 +29,8 @@ func main() {
 	r.POST("/logout", middleware.RequireAuth, controllers.Logout)
 	r.GET("/validate", middleware.RequireAuth, controllers.Validate)
 
+	r.GET("/auth/google/login", controllers.GoogleLogin)
+	r.GET("/auth/google/callback", controllers.GoogleCallback)
+
 	r.Run()
 }

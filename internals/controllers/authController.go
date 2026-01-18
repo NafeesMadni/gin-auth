@@ -4,14 +4,12 @@ import (
 	"errors"
 	"gin-auth/internals/initializers"
 	"gin-auth/internals/models"
+	"gin-auth/internals/utils"
 	"net/http"
 	"os"
-	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -86,28 +84,13 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	expStr := os.Getenv("JWT_EXPIRATION_SECONDS")
-	expSeconds, err := strconv.Atoi(expStr)
+	tokenString, err := utils.GenerateAndSetToken(c, user.ID)
 	if err != nil {
-		expSeconds = 86400 // Default to 24 hours if .env is missing
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create token"})
+		return
 	}
 
-	tokenID := uuid.New().String()
-
-	// Create JWT Token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": user.ID,
-		"jti": tokenID,
-		"exp": time.Now().Add(time.Duration(expSeconds) * time.Second).Unix(),
-	})
-
-	tokenString, err := token.SignedString([]byte(os.Getenv("SECRET")))
-
-	// Set Cookie (Optional but recommended for browsers)
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", tokenString, 3600*24, "", "", false, true) // set secure to true in production
-
-	c.JSON(http.StatusOK, gin.H{"token": tokenString})
+	c.JSON(http.StatusOK, gin.H{"message": "Logged in via Google successfully", "token": tokenString})
 }
 
 func Logout(c *gin.Context) {
