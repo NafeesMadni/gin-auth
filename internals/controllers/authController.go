@@ -41,6 +41,17 @@ func Signup(c *gin.Context) {
 		return
 	}
 
+	existingUser := models.User{}
+	if err := initializers.DB.Where("email = ?", body.Email).First(&existingUser).Error; err == nil {
+		if existingUser.IsVerified {
+			c.JSON(http.StatusConflict, gin.H{"error": "This email is already registered. Please log in."})
+			return
+		} else {
+			c.JSON(http.StatusConflict, gin.H{"error": "You are already registered. Please check your email to verify your account."})
+			return
+		}
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 10)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to hash password"})
