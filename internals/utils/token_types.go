@@ -5,7 +5,7 @@ type CookieConfig struct {
 	Path     string `default:""`      // Path: e.g., "/", "/auth/refresh"
 	Domain   string `default:""`      // Domain: Set to your domain, e.g., "example.com"
 	Secure   bool   `default:"false"` // Secure: Set to true if using HTTPS
-	HttpOnly bool   `default:"true"`  // HttpOnly: CRITICAL for XSS protection
+	HttpOnly bool   `default:"true"`  // HttpOnly: CRITICAL for XSS protection - Always true
 }
 
 // TokenMetadata holds the results of token generation

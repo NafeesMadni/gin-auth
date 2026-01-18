@@ -13,7 +13,9 @@ func SyncDatabase() {
 	err := DB.AutoMigrate(
 		&models.User{},
 		&models.Blacklist{},
+		&models.Session{},
 	)
+
 	if err != nil {
 		panic("Failed to migrate database")
 	}

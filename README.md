@@ -55,8 +55,13 @@ DB_URL=local.db
 SECRET=your_jwt_signing_secret
 
 # JWT & Cleanup Configuration
-JWT_EXPIRATION_SECONDS=86400
+# Access token: 15 minutes (900s) | Refresh token: 7 days (604800s)
+JWT_EXPIRATION_SECONDS=900
+REFRESH_TOKEN_EXPIRATION_SECONDS=604800
 CLEANUP_INTERVAL_MINUTES=30
+
+# Set to false for local development, true for production
+COOKIE_SECURE=false
 
 # Google OAuth2 Credentials
 GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com

@@ -66,13 +66,8 @@ func GoogleCallback(c *gin.Context) {
 		user = models.User{Email: googleUser.Email}
 		initializers.DB.Create(&user)
 	}
-	// Generate tokens and set cookies
-	accCookieConfig := utils.CookieConfig{}
-	refCookieConfig := utils.CookieConfig{
-		Path: "/auth/refresh",
-	}
 
-	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID, accCookieConfig, refCookieConfig)
+	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
