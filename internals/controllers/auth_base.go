@@ -1,0 +1,190 @@
+package controllers
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"time"
+
+	"gin-auth/internals/models"
+	"gin-auth/internals/utils"
+
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
+)
+
+type AuthController struct {
+	DB        *gorm.DB
+	Config    *utils.SMTPConfig
+	JWTSecret string
+	AccMaxAge int
+}
+
+func NewAuthController(db *gorm.DB, smtp_config *utils.SMTPConfig, jwtSecret string, accMaxAge int) *AuthController {
+	return &AuthController{
+		DB:        db,
+		Config:    smtp_config,
+		JWTSecret: jwtSecret,
+		AccMaxAge: accMaxAge,
+	}
+}
+
+func (a *AuthController) Signup(c *gin.Context) {
+	var body struct {
+		Email    string
+		Password string
+	}
+
+	if c.Bind(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read body"})
+		return
+	}
+
+	existingUser := models.User{}
+	if err := a.DB.Where("email = ?", body.Email).First(&existingUser).Error; err == nil {
+		if existingUser.IsVerified {
+			c.JSON(http.StatusConflict, gin.H{"error": "This email is already registered. Please log in."})
+			return
+		} else {
+			c.JSON(http.StatusConflict, gin.H{"error": "You are already registered. Please check your email to verify your account."})
+			return
+		}
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 10)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to hash password"})
+		return
+	}
+
+	code := utils.GenerateVerificationCode()
+	expirationMinutes := a.Config.CodeExp
+
+	newUser := models.User{
+		Email:            body.Email,
+		Password:         string(hash),
+		VerificationCode: code,
+		CodeExpiresAt:    time.Now().Add(time.Duration(expirationMinutes) * time.Minute),
+	}
+
+	result := a.DB.Create(&newUser)
+
+	if result.Error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create user"})
+		return
+	}
+
+	// Send the email in a background goroutine so the response isn't slow
+	go utils.SendVerificationEmail(newUser.Email, code, a.Config)
+
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Please check your email for the verification code. The code will expires in %d minutes.", expirationMinutes)})
+}
+
+func (a *AuthController) Login(c *gin.Context) {
+	var body struct {
+		Email    string
+		Password string
+	}
+
+	c.Bind(&body)
+
+	var user models.User // initialize an empty user struct with values set to their zero values
+
+	result := a.DB.Where("email = ?", body.Email).First(&user)
+
+	if result.Error != nil {
+		// Specifically check if the error is "Record Not Found"
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Please enter a valid email address"})
+			return
+		}
+
+		// Handle other possible database errors (connection lost, etc.)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
+
+	// Compare the provided password with the hashed password in the database
+	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Please enter a valid password"})
+		return
+	}
+
+	if !user.IsVerified {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Email is not verified"})
+		return
+	}
+
+	// --- 2FA CHECK ---
+	if user.TwoFAEnabled {
+		// Return a 200 OK but with a flag indicating MFA is needed
+		// No session or cookies are created yet
+		c.JSON(http.StatusOK, gin.H{
+			"mfa_required": true,
+			"email":        user.Email,
+			"message":      "Please enter your 2FA code to continue",
+		})
+		return
+	}
+
+	// Standard Login (No 2FA): Create Session & Set Cookies
+	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID, a.JWTSecret)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Logged in successfully", "access_token": tokenMetadata.AccessToken, "refresh_token": tokenMetadata.RefreshToken})
+}
+
+func (a *AuthController) Logout(c *gin.Context) {
+	acctokenStr, accErr := c.Cookie("Authorization")
+	reftokenStr, refErr := c.Cookie("RefreshToken")
+
+	// If both are missing, the user is already "logged out"
+	if accErr != nil && refErr != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "Already logged out"})
+		return
+	}
+
+	// 1. Target the session for immediate revocation via the Refresh Token string.
+	// 2. Fallback Logic: If the token is invalid/tampered, the query fails to find a match.
+	// 3. Fail-safe: The Background Janitor acts as the ultimate source of truth,
+	//    deleting any session by expiration date, regardless of the token's validity.
+	if reftokenStr != "" {
+		// Unscoped(): permanently remove the session record
+		a.DB.Unscoped().Where("refresh_token = ?", reftokenStr).Delete(&models.Session{})
+	}
+
+	// Blacklist the access token
+	if acctokenStr != "" {
+		token, _ := jwt.Parse(acctokenStr, func(t *jwt.Token) (interface{}, error) {
+			return []byte(a.JWTSecret), nil
+		})
+
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if jti, ok := claims["jti"].(string); ok {
+
+				// In jwt-go, numbers are parsed as float64 by default
+				var expireAt time.Time
+				if exp, ok := claims["exp"].(float64); ok {
+					expireAt = time.Unix(int64(exp), 0)
+				} else {
+					expSeconds := a.AccMaxAge
+					expireAt = time.Now().Add(time.Duration(expSeconds) * time.Second)
+				}
+
+				// 2. Create the Blacklist entry with the expiration date
+				a.DB.Create(&models.Blacklist{
+					Jti:       jti,
+					ExpiresAt: expireAt,
+				})
+			}
+		}
+	}
+	utils.SetClearCookies(c)
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+}

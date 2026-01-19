@@ -1,26 +1,37 @@
 package middleware
 
 import (
-	"gin-auth/internals/initializers"
-	"gin-auth/internals/models"
 	"net/http"
-	"os"
 	"time"
+
+	"gin-auth/internals/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"gorm.io/gorm"
 )
 
-func RequireAuth(c *gin.Context) {
-	tokenString, err := c.Cookie("Authorization")
+type RequireAuthMiddleware struct {
+	DB        *gorm.DB
+	JWTSecret string
+}
 
+func NewRequireAuthMiddleware(db *gorm.DB, jwtSecret string) *RequireAuthMiddleware {
+	return &RequireAuthMiddleware{
+		DB:        db,
+		JWTSecret: jwtSecret,
+	}
+}
+
+func (m *RequireAuthMiddleware) RequireAuth(c *gin.Context) {
+	tokenString, err := c.Cookie("Authorization")
 	if err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
 	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("SECRET")), nil
+		return []byte(m.JWTSecret), nil
 	})
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
@@ -28,7 +39,7 @@ func RequireAuth(c *gin.Context) {
 
 		// Check if this JTI exists in the Blacklist table
 		var blacklisted models.Blacklist
-		initializers.DB.Where("jti = ?", jti).First(&blacklisted)
+		m.DB.Where("jti = ?", jti).First(&blacklisted)
 
 		if blacklisted.ID != 0 {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token is invalid (logged out)"})
@@ -41,7 +52,7 @@ func RequireAuth(c *gin.Context) {
 		}
 
 		var user models.User
-		initializers.DB.First(&user, claims["sub"])
+		m.DB.First(&user, claims["sub"])
 
 		if user.ID == 0 {
 			c.AbortWithStatus(http.StatusUnauthorized)
