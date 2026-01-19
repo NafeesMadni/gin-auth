@@ -8,7 +8,13 @@ import (
 	"errors"
 	"io"
 	"os"
+
+	"github.com/pquerna/otp/totp"
 )
+
+func Validate2FA(code string, decryptedSecret string) bool {
+	return totp.Validate(code, decryptedSecret)
+}
 
 // Encrypt encrypts a string using AES-GCM and the master key from .env
 func Encrypt(plainText string) (string, error) {

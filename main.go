@@ -35,10 +35,11 @@ func main() {
 				"message":     "Gin-Auth API is running",
 			})
 		})
-		r.POST("/signup", controllers.Signup)
-		r.POST("/verify", controllers.VerifyEmail)
-		r.POST("/resend-code", controllers.ResendVerificationCode)
-		r.POST("/login", controllers.Login)
+		public.POST("/signup", controllers.Signup)
+		public.POST("/verify", controllers.VerifyEmail)
+		public.POST("/resend-code", controllers.ResendVerificationCode)
+		public.POST("/login", controllers.Login)
+		public.POST("/2fa/login-verify", controllers.LoginVerify2FA)
 	}
 
 	protected := r.Group("/")
