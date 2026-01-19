@@ -46,6 +46,9 @@ func main() {
 	{
 		protected.POST("/logout", controllers.Logout)
 		protected.GET("/validate", controllers.Validate)
+
+		protected.POST("/2fa/setup", controllers.Setup2FA)
+		protected.POST("/2fa/activate", controllers.Activate2FA)
 	}
 
 	auth := r.Group("/auth")

@@ -1,8 +1,11 @@
 package controllers
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"image/png"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -163,6 +167,68 @@ func ResendVerificationCode(c *gin.Context) {
 	go utils.SendVerificationEmail(user.Email, newCode)
 
 	c.JSON(http.StatusOK, gin.H{"message": "A new verification code has been sent to your email"})
+}
+
+func Setup2FA(c *gin.Context) {
+	// get user from context (which was set in middleware)
+	user, _ := c.Get("user")
+	u := user.(models.User)
+
+	// Generate a new TOTP Key
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      os.Getenv("APP_NAME"),
+		AccountName: u.Email,
+	})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to generate 2FA key"})
+		return
+	}
+
+	encrypted_secret, err := utils.Encrypt(key.Secret())
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to encrypt 2FA secret"})
+		return
+	}
+
+	// Save the Secret to the user's record
+	initializers.DB.Model(&u).Update("TwoFASecret", encrypted_secret)
+
+	// Generate QR Code as a Base64 image
+	img, _ := key.Image(200, 200)
+	var buf bytes.Buffer
+	png.Encode(&buf, img)
+	imgBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	c.JSON(200, gin.H{
+		"secret":      key.Secret(),
+		"qr_code_url": "data:image/png;base64," + imgBase64,
+	})
+}
+
+func Activate2FA(c *gin.Context) {
+	var body struct {
+		Code string `json:"code" binding:"required"`
+	}
+	c.Bind(&body)
+
+	// get user from context (which was set in middleware)
+	user, _ := c.Get("user")
+	u := user.(models.User)
+
+	decrypted_secret, err := utils.Decrypt(u.TwoFASecret)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to decrypt 2FA secret"})
+		return
+	}
+
+	valid := totp.Validate(body.Code, decrypted_secret)
+	if !valid {
+		c.JSON(400, gin.H{"error": "Invalid verification code"})
+		return
+	}
+
+	initializers.DB.Model(&u).Update("TwoFAEnabled", true)
+	c.JSON(200, gin.H{"message": "2FA activated successfully"})
 }
 
 func Login(c *gin.Context) {

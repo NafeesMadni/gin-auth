@@ -6,13 +6,14 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 
 ### 🚀 Key Features
 
-* **Secure Authentication:** Standard Signup/Login with password hashing.
-* **Email Verification:** Integration with Gmail SMTP to verify user accounts via OTP.
-* **Signup Collision Handling:** Prevents duplicate accounts while providing clear instructions for existing verified or unverified users.
-* **Google OAuth2 Integration:** Seamless social login via Google.
-* **Refresh Token Rotation:** High-security session management that rotates tokens on every refresh.
-* **Hybrid Logout & Revocation:** Supports both stateful session deletion and stateless JTI blacklisting.
-* **Automated Maintenance:** A background "janitor" goroutine that periodically purges expired sessions, blacklist entries, and unverified user accounts to optimize database performance.
+* **Multi-Factor Authentication (2FA):** Secure TOTP (Time-based One-Time Password) implementation with AES-256-GCM encryption for secrets at rest.
+* **Secure Authentication:** Standard Signup/Login with password hashing using Bcrypt.
+* **Email Verification:** Integration with Gmail SMTP to verify user accounts via OTP with built-in cooldown logic.
+* **Signup Collision Handling:** Intelligent logic to handle duplicate registration attempts for verified vs. unverified users.
+* **Google OAuth2:** Seamless social login integration.
+* **Refresh Token Rotation:** High-security session management that rotates tokens on every refresh to prevent replay attacks.
+* **Hybrid Logout:** Supports stateful session revocation and stateless JTI blacklisting.
+* **Automated Maintenance:** Background "janitor" goroutine to purge expired sessions, blacklist entries, and abandoned unverified accounts.
 
 ---
 
@@ -21,7 +22,8 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 * **Language:** Go (Golang)
 * **Framework:** Gin Gonic
 * **Database:** SQLite (via GORM)
-* **Authentication:** JWT (v5), OAuth2, SMTP (Gmail)
+* **Encryption:** AES-GCM (for 2FA secrets)
+* **Authentication:** JWT, TOTP, OAuth2, SMTP (Gmail)
 * **Hot Reload:** Air
 
 ---
@@ -31,11 +33,11 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 ```text
 .
 ├── internals/
-│   ├── controllers/  # Auth, OAuth, and User logic
-│   ├── initializers/ # DB connection, and Cleanup tasks
-│   ├── middleware/   # JWT verification and Blacklist checking
+│   ├── controllers/  # Auth, OAuth, 2FA, and User logic
+│   ├── initializers/ # DB, Env, and Background Janitor
+│   ├── middleware/   # JWT/MFA verification and Blacklist checking
 │   ├── models/       # GORM schemas (User, Session, Blacklist)
-│   └── utils/        # Token generation, Emailing & helpers
+│   └── utils/        # Crypto, Token generation, Emailing & helpers
 ├── main.go           # Application entry point
 ├── .air.toml         # Hot reload configuration
 └── .env.example      # Environment variables example
@@ -77,22 +79,24 @@ Create a `.env` file in the root directory:
 APP_NAME=your_app_name
 PORT=3000
 DB_URL=local.db
-SECRET=your_jwt_signing_secret
 
 # JWT & Cleanup Configuration
+SECRET=your_jwt_signing_secret
 JWT_EXPIRATION_SECONDS=900
 REFRESH_TOKEN_EXPIRATION_SECONDS=604800
 CLEANUP_INTERVAL_MINUTES=30
 
+ENCRYPTION_KEY=your_32_char_hex_key_for_2fa # openssl rand -hex 16
+
 # Security Configuration
 COOKIE_SECURE=false # Set to true for production/HTTPS
 
-# Google OAuth2 Credentials
-GOOGLE_CLIENT_ID=your_client_id
-GOOGLE_CLIENT_SECRET=your_client_secret
+# Google OAuth2
+GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_secret
 GOOGLE_REDIRECT_URL=http://localhost:3000/auth/google/callback
 
-# Gmail SMTP Configuration
+# Gmail SMTP
 GMAIL_USER=your_email@gmail.com
 GMAIL_APP_PASSWORD=your_16_char_app_password
 VERIFICATION_EXPIRATION_MINUTES=10
@@ -114,28 +118,43 @@ go run main.go
 
 ### 🧪 API Endpoints
 
+#### **Public Routes**
+
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/` | Returns a 200 OK or API metadata (Health Check). |
-| `POST` | `/signup` | **Signup**: Creates account and sends OTP. Prevents collisions with existing users. |
-| `POST` | `/verify` | **Activation**: Validates the email OTP code and activates the user account. |
-| `POST` | `/resend-code` | **Utility**: Sends a new OTP code if the previous one expired or was lost (1-min cooldown). |
-| `POST` | `/login` | Authenticates verified users and issues stateful session cookies. |
-| `GET` | `/auth/google/login` | Initiates the Google OAuth2 flow. |
-| `GET` | `/auth/google/callback` | Handles Google response and issues local session tokens. |
-| `POST` | `/auth/refresh` | **Rotation**: Replaces the current Refresh Token with a new pair. |
-| `POST` | `/logout` | **Revocation**: Deletes DB session and blacklists the current JTI. |
-| `GET` | `/validate` | Middleware-protected route to verify the active Authorization token. |
+| `GET` | `/` | **Health Check**: System status and metadata. |
+| `POST` | `/signup` | Creates account and triggers email verification. |
+| `POST` | `/verify` | Validates email OTP and activates account. |
+| `POST` | `/resend-code` | Requests a fresh verification code (1-min cooldown). |
+| `POST` | `/login` | Validates credentials and issues session cookies. |
+
+#### **Protected Routes (Requires JWT)**
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/logout` | Revokes DB session and blacklists JTI. |
+| `GET` | `/validate` | Verifies current session and returns user data. |
+| `POST` | `/2fa/setup` | Generates a new TOTP secret and QR code. |
+| `POST` | `/2fa/activate` | Verifies initial TOTP code to enable MFA on account. |
+
+#### **Auth Routes**
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/auth/refresh` | **Rotation**: Exchanges old refresh token for new pair. |
+| `GET` | `/auth/google/login` | Redirects to Google Consent screen. |
+| `GET` | `/auth/google/callback` | Finalizes Google OAuth2 authentication. |
 
 ---
 
 ### 🧹 Database Maintenance
 
-The project includes an automated **Background Janitor** that ensures the SQLite database stays small and fast. Every `CLEANUP_INTERVAL_MINUTES`, the janitor performs the following:
+The **Background Janitor** goroutine runs every `CLEANUP_INTERVAL_MINUTES` to ensure the database remains optimized:
 
-* **Session Purge:** Permanently deletes rows in the `sessions` table where `expires_at < now`.
-* **Blacklist Purge:** Removes entries in the `blacklists` table once the Access Token's natural lifespan has ended.
-* **User Cleanup:** Removes unverified accounts that have not completed the email verification flow within 24 hours to prevent "ghost" account bloat.
+1. **Session Purge:** Removes rows where `expires_at < now`.
+2. **Blacklist Purge:** Cleans JTIs once the access token's lifespan is over.
+3. **Ghost Account Cleanup:** Deletes users who haven't verified their email within 24 hours.
+
 
 ---
 

@@ -13,4 +13,7 @@ type User struct {
 	IsVerified       bool `gorm:"default:false"`
 	VerificationCode string
 	CodeExpiresAt    time.Time
+
+	TwoFAEnabled bool   `gorm:"default:false"`
+	TwoFASecret  string `gorm:"default:null"`
 }
