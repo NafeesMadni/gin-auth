@@ -82,7 +82,7 @@ PORT=3000
 DB_URL=local.db
 
 # JWT & Cleanup Configuration
-SECRET=your_jwt_signing_secret
+JWT_SECRET_KEY=your_jwt_signing_secret
 JWT_EXPIRATION_SECONDS=900
 REFRESH_TOKEN_EXPIRATION_SECONDS=604800
 CLEANUP_INTERVAL_MINUTES=30
