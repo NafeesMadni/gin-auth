@@ -8,6 +8,7 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 
 * **Multi-Factor Authentication (2FA):** Secure TOTP (Time-based One-Time Password) implementation with AES-256-GCM encryption for secrets at rest.
 * **Secure Authentication:** Standard Signup/Login with password hashing using Bcrypt.
+* **Two-Step Secure Login**: Enhanced `/login` flow that detects MFA status and requires a secondary verification step via `/2fa/login-verify` before issuing session cookies.
 * **Email Verification:** Integration with Gmail SMTP to verify user accounts via OTP with built-in cooldown logic.
 * **Signup Collision Handling:** Intelligent logic to handle duplicate registration attempts for verified vs. unverified users.
 * **Google OAuth2:** Seamless social login integration.
@@ -126,7 +127,8 @@ go run main.go
 | `POST` | `/signup` | Creates account and triggers email verification. |
 | `POST` | `/verify` | Validates email OTP and activates account. |
 | `POST` | `/resend-code` | Requests a fresh verification code (1-min cooldown). |
-| `POST` | `/login` | Validates credentials and issues session cookies. |
+| `POST` | `/login` | **Gateway**: Checks password. Returns mfa_required: true if 2FA is active. |
+| `POST` | `/2fa/login-verify` | **MFA Step 2**: Validates Authenticator App code to finalize session. |
 
 #### **Protected Routes (Requires JWT)**
 
