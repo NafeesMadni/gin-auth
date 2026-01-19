@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"image/png"
 	"net/http"
-	"os"
 
 	"gin-auth/internals/models"
 	"gin-auth/internals/utils"
@@ -17,11 +16,19 @@ import (
 
 type MFAController struct {
 	DB        *gorm.DB
-	jwtSecret string
+	JWTSecret string
+	// AppName is the name of the application used for TOTP issuer
+	AppName       string
+	EncryptionKey string
 }
 
-func NewMFAController(db *gorm.DB, jwtSecret string) *MFAController {
-	return &MFAController{DB: db, jwtSecret: jwtSecret}
+func NewMFAController(db *gorm.DB, jwtSecret string, appName string, encryptionKey string) *MFAController {
+	return &MFAController{
+		DB:            db,
+		JWTSecret:     jwtSecret,
+		AppName:       appName,
+		EncryptionKey: encryptionKey,
+	}
 }
 
 func (m *MFAController) Setup2FA(c *gin.Context) {
@@ -31,7 +38,7 @@ func (m *MFAController) Setup2FA(c *gin.Context) {
 
 	// Generate a new TOTP Key
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      os.Getenv("APP_NAME"),
+		Issuer:      m.AppName,
 		AccountName: u.Email,
 	})
 	if err != nil {
@@ -39,7 +46,7 @@ func (m *MFAController) Setup2FA(c *gin.Context) {
 		return
 	}
 
-	encrypted_secret, err := utils.Encrypt(key.Secret())
+	encrypted_secret, err := utils.Encrypt(key.Secret(), m.EncryptionKey)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to encrypt 2FA secret"})
 		return
@@ -70,7 +77,7 @@ func (m *MFAController) Activate2FA(c *gin.Context) {
 	user, _ := c.Get("user")
 	u := user.(models.User)
 
-	decryptedSecret, err := utils.Decrypt(u.TwoFASecret)
+	decryptedSecret, err := utils.Decrypt(u.TwoFASecret, m.EncryptionKey)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to decrypt 2FA secret"})
 		return
@@ -108,7 +115,7 @@ func (m *MFAController) LoginVerify2FA(c *gin.Context) {
 	}
 
 	// Decrypt the stored TOTP secret
-	decryptedSecret, err := utils.Decrypt(user.TwoFASecret)
+	decryptedSecret, err := utils.Decrypt(user.TwoFASecret, m.EncryptionKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process security key"})
 		return
@@ -120,7 +127,7 @@ func (m *MFAController) LoginVerify2FA(c *gin.Context) {
 	}
 
 	// Success! Create the final session and set JWT cookies
-	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID, m.jwtSecret)
+	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID, m.JWTSecret)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
 		return

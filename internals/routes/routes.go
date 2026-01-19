@@ -1,8 +1,7 @@
 package routes
 
 import (
-	"os"
-
+	"gin-auth/internals/config"
 	"gin-auth/internals/controllers"
 	"gin-auth/internals/middleware"
 	"gin-auth/internals/utils"
@@ -14,23 +13,26 @@ import (
 func SetupRouter(db *gorm.DB) *gin.Engine {
 	r := gin.Default()
 
+	jwtSecret := config.GetEnv("JWT_SECRET_KEY")
+	accMaxAge := config.GetEnvAsInt("JWT_EXPIRATION_SECONDS", 86400, true) // Default 24 hours
+	appName := config.GetEnvAsStr("APP_NAME", "Gin-Auth")
+	encryptionKey := config.GetEnv("ENCRYPTION_KEY")
+
 	smtpSettings := &utils.SMTPConfig{
 		Host:     "smtp.gmail.com",
 		Port:     587,
-		User:     os.Getenv("GMAIL_USER"),
-		Password: os.Getenv("GMAIL_APP_PASSWORD"),
-		AppName:  utils.GetEnv("APP_NAME", "Gin-Auth"),
-		CodeExp:  utils.GetEnvAsInt("VERIFICATION_EXPIRATION_MINUTES", 10, true),
+		User:     config.GetEnv("GMAIL_USER"),
+		Password: config.GetEnv("GMAIL_APP_PASSWORD"),
+		AppName:  appName,
+		CodeExp:  config.GetEnvAsInt("VERIFICATION_EXPIRATION_MINUTES", 10, true),
 	}
-
-	jwtSecret := os.Getenv("JWT_SECRET_KEY")
 
 	// Instantiate the "Class"
 	authMiddleware := middleware.NewRequireAuthMiddleware(db, jwtSecret)
 
 	googleAuthCtrl := controllers.NewGoogleAuthController(db, jwtSecret)
-	authCtrl := controllers.NewAuthController(db, smtpSettings, jwtSecret)
-	mfaCtrl := controllers.NewMFAController(db, jwtSecret)
+	authCtrl := controllers.NewAuthController(db, smtpSettings, jwtSecret, accMaxAge)
+	mfaCtrl := controllers.NewMFAController(db, jwtSecret, appName, encryptionKey)
 	tokenCtrl := controllers.NewTokenController(db, jwtSecret)
 	verifyCtrl := controllers.NewVerificationController(db, smtpSettings)
 

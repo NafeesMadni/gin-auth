@@ -2,19 +2,14 @@ package initializers
 
 import (
 	"log"
-	"os"
-	"strconv"
 	"time"
 
+	"gin-auth/internals/config"
 	"gin-auth/internals/models"
 )
 
 func StartBlacklistCleanup() {
-	cleanupIntervalStr := os.Getenv("CLEANUP_INTERVAL_MINUTES")
-	cleanupInterval, err := strconv.Atoi(cleanupIntervalStr)
-	if err != nil {
-		cleanupInterval = 30 // Default to 30 minute if .env is missing
-	}
+	cleanupInterval := config.GetEnvAsInt("CLEANUP_INTERVAL_MINUTES", 30, true)
 	ticker := time.NewTicker(time.Duration(cleanupInterval) * time.Minute)
 
 	go func() {

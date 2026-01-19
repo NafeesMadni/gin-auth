@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 
+	"gin-auth/internals/config"
 	"gin-auth/internals/models"
 	"gin-auth/internals/utils"
 
@@ -27,9 +27,9 @@ func NewGoogleAuthController(db *gorm.DB, jwtSecret string) *GoogleAuthControlle
 	return &GoogleAuthController{
 		DB: db,
 		Config: &oauth2.Config{
-			ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-			ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-			RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+			ClientID:     config.GetEnv("GOOGLE_CLIENT_ID"),
+			ClientSecret: config.GetEnv("GOOGLE_CLIENT_SECRET"),
+			RedirectURL:  config.GetEnv("GOOGLE_REDIRECT_URL"),
 			Endpoint:     google.Endpoint,
 			Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		},

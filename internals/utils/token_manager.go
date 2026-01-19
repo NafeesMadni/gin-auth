@@ -3,9 +3,9 @@ package utils
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
+	"gin-auth/internals/config"
 	"gin-auth/internals/initializers"
 	"gin-auth/internals/models"
 
@@ -30,7 +30,7 @@ type TokenMetadata struct {
 
 func GetDefaultCookieConfigs() (CookieConfig, CookieConfig) {
 	// Check if we are in production/secure mode
-	isSecure := os.Getenv("COOKIE_SECURE") == "true"
+	isSecure := config.GetEnv("COOKIE_SECURE") == "true"
 
 	acc := CookieConfig{Secure: isSecure}
 	ref := CookieConfig{Path: "/auth/refresh", Secure: isSecure}
@@ -69,8 +69,8 @@ func GenerateAndSetToken(
 	UserID uint,
 	jwtSecret string,
 ) (*TokenMetadata, error) {
-	accExp := GetEnvAsInt("JWT_EXPIRATION_SECONDS", 900, true)             // Default 15 mins
-	refExp := GetEnvAsInt("REFRESH_TOKEN_EXPIRATION_SECONDS", 86400, true) // Default 24 hours
+	accExp := config.GetEnvAsInt("JWT_EXPIRATION_SECONDS", 900, true)             // Default 15 mins
+	refExp := config.GetEnvAsInt("REFRESH_TOKEN_EXPIRATION_SECONDS", 86400, true) // Default 24 hours
 
 	accExpiresAt := time.Now().Add(time.Duration(accExp) * time.Second)
 	refExpiresAt := time.Now().Add(time.Duration(refExp) * time.Second)

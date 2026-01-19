@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"os"
 
 	"github.com/pquerna/otp/totp"
 )
@@ -17,8 +16,8 @@ func Validate2FA(code string, decryptedSecret string) bool {
 }
 
 // Encrypt encrypts a string using AES-GCM and the master key from .env
-func Encrypt(plainText string) (string, error) {
-	key := []byte(os.Getenv("ENCRYPTION_KEY"))
+func Encrypt(plainText string, encryptionKey string) (string, error) {
+	key := []byte(encryptionKey)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -44,8 +43,8 @@ func Encrypt(plainText string) (string, error) {
 }
 
 // Decrypt takes the hex string from the DB and returns the original secret
-func Decrypt(cipherTextHex string) (string, error) {
-	key := []byte(os.Getenv("ENCRYPTION_KEY"))
+func Decrypt(cipherTextHex string, encryptionKey string) (string, error) {
+	key := []byte(encryptionKey)
 
 	data, err := hex.DecodeString(cipherTextHex)
 	if err != nil {

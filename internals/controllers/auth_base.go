@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 
 	"gin-auth/internals/models"
@@ -21,13 +19,15 @@ type AuthController struct {
 	DB        *gorm.DB
 	Config    *utils.SMTPConfig
 	JWTSecret string
+	AccMaxAge int
 }
 
-func NewAuthController(db *gorm.DB, smtp_config *utils.SMTPConfig, jwtSecret string) *AuthController {
+func NewAuthController(db *gorm.DB, smtp_config *utils.SMTPConfig, jwtSecret string, accMaxAge int) *AuthController {
 	return &AuthController{
 		DB:        db,
 		Config:    smtp_config,
 		JWTSecret: jwtSecret,
+		AccMaxAge: accMaxAge,
 	}
 }
 
@@ -173,11 +173,7 @@ func (a *AuthController) Logout(c *gin.Context) {
 				if exp, ok := claims["exp"].(float64); ok {
 					expireAt = time.Unix(int64(exp), 0)
 				} else {
-					expSeconds, err := strconv.Atoi(os.Getenv("JWT_EXPIRATION_SECONDS"))
-					if err != nil {
-						expSeconds = 86400 // Default to 24 hours if .env is missing
-					}
-					// Fallback: If exp is missing, set a safe default (e.g., 24 hours from now)
+					expSeconds := a.AccMaxAge
 					expireAt = time.Now().Add(time.Duration(expSeconds) * time.Second)
 				}
 
