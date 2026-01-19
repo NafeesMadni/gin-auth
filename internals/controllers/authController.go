@@ -215,14 +215,13 @@ func Activate2FA(c *gin.Context) {
 	user, _ := c.Get("user")
 	u := user.(models.User)
 
-	decrypted_secret, err := utils.Decrypt(u.TwoFASecret)
+	decryptedSecret, err := utils.Decrypt(u.TwoFASecret)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to decrypt 2FA secret"})
 		return
 	}
 
-	valid := totp.Validate(body.Code, decrypted_secret)
-	if !valid {
+	if !utils.Validate2FA(body.Code, decryptedSecret) {
 		c.JSON(400, gin.H{"error": "Invalid verification code"})
 		return
 	}
@@ -267,6 +266,19 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// --- 2FA CHECK ---
+	if user.TwoFAEnabled {
+		// Return a 200 OK but with a flag indicating MFA is needed
+		// No session or cookies are created yet
+		c.JSON(http.StatusOK, gin.H{
+			"mfa_required": true,
+			"email":        user.Email,
+			"message":      "Please enter your 2FA code to continue",
+		})
+		return
+	}
+
+	// Standard Login (No 2FA): Create Session & Set Cookies
 	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
@@ -274,6 +286,50 @@ func Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logged in successfully", "access_token": tokenMetadata.AccessToken, "refresh_token": tokenMetadata.RefreshToken})
+}
+
+func LoginVerify2FA(c *gin.Context) {
+	var body struct {
+		Email string `json:"email" binding:"required"`
+		Code  string `json:"code" binding:"required"`
+	}
+
+	if c.Bind(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email and Code are required"})
+		return
+	}
+
+	var user models.User
+	if err := initializers.DB.Where("email = ?", body.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+
+	if !user.TwoFAEnabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "2FA is not enabled for this account"})
+		return
+	}
+
+	// Decrypt the stored TOTP secret
+	decryptedSecret, err := utils.Decrypt(user.TwoFASecret)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process security key"})
+		return
+	}
+
+	if !utils.Validate2FA(body.Code, decryptedSecret) {
+		c.JSON(400, gin.H{"error": "Invalid verification code"})
+		return
+	}
+
+	// Success! Create the final session and set JWT cookies
+	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "You'r verified, logged in successfully.", "access_token": tokenMetadata.AccessToken, "refresh_token": tokenMetadata.RefreshToken})
 }
 
 func Logout(c *gin.Context) {
