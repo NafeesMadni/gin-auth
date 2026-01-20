@@ -17,13 +17,13 @@ import (
 
 // GoogleAuthController handles only Google-specific OAuth logic
 type GoogleAuthController struct {
-	DB        *gorm.DB
-	Config    *oauth2.Config
-	jwtSecret string
+	DB           *gorm.DB
+	Config       *oauth2.Config
+	TokenManager *utils.TokenManager
 }
 
 // NewGoogleAuthController initializes the config once at startup
-func NewGoogleAuthController(db *gorm.DB, jwtSecret string) *GoogleAuthController {
+func NewGoogleAuthController(db *gorm.DB, tokenManager *utils.TokenManager) *GoogleAuthController {
 	return &GoogleAuthController{
 		DB: db,
 		Config: &oauth2.Config{
@@ -33,7 +33,7 @@ func NewGoogleAuthController(db *gorm.DB, jwtSecret string) *GoogleAuthControlle
 			Endpoint:     google.Endpoint,
 			Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		},
-		jwtSecret: jwtSecret,
+		TokenManager: tokenManager,
 	}
 }
 
@@ -78,7 +78,7 @@ func (g *GoogleAuthController) Callback(c *gin.Context) {
 		g.DB.Create(&user)
 	}
 
-	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID, g.jwtSecret)
+	tokenMetadata, err := g.TokenManager.GenerateAndSetToken(c, user.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
 		return

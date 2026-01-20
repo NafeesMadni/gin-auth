@@ -7,6 +7,7 @@ import (
 )
 
 // GetEnv fetches a key or returns an empty string
+// Critical env vars should use this function
 func GetEnv(key string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
@@ -16,6 +17,7 @@ func GetEnv(key string) string {
 }
 
 // GetEnvAsStr fetches a key or returns a fallback value
+// Useful for non-critical env vars
 func GetEnvAsStr(key string, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value

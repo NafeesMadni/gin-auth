@@ -5,21 +5,49 @@ import (
 	"net/http"
 	"time"
 
-	"gin-auth/internals/config"
-	"gin-auth/internals/initializers"
 	"gin-auth/internals/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
-// CookieConfig groups settings for cleaner function signatures
-type CookieConfig struct {
-	Path     string `default:""`      // Path: e.g., "/", "/auth/refresh"
-	Domain   string `default:""`      // Domain: Set to your domain, e.g., "example.com"
-	Secure   bool   `default:"false"` // Secure: Set to true if using HTTPS
-	HttpOnly bool   `default:"true"`  // HttpOnly: CRITICAL for XSS protection - Always true
+// TokenManager handles token generation, storage, and cookie management
+type TokenManager struct {
+	// DB is the database connection used for storing sessions
+	DB *gorm.DB
+	// JWTSecret is the secret key used for signing tokens (Access and Refresh)
+	JWTSecret string
+	// isSecure indicates if cookies should be marked as Secure
+	isSecure bool
+	// AccMaxAge is the expiration time in seconds for Access tokens
+	AccMaxAge int
+	// RefMaxAge is the expiration time in seconds for Refresh tokens
+	RefMaxAge int
+	// Domain for the cookies (Access and Refresh)
+	CookieDomain string
+	// HttpOnly indicates if cookies should be marked as HttpOnly
+	HttpOnly bool
+	// AccPath for the Access token
+	AccPath string
+	// RefPath for the Refresh token
+	RefPath string
+}
+
+// NewTokenManager initializes and returns a new TokenManager instance
+func NewTokenManager(db *gorm.DB, jwtSecret string, isSecure bool, accMaxAge int, refMaxAge int, cookieDomain string, httpOnly bool, accPath string, refPath string) *TokenManager {
+	return &TokenManager{
+		DB:           db,
+		JWTSecret:    jwtSecret,
+		isSecure:     isSecure,
+		AccMaxAge:    accMaxAge,
+		RefMaxAge:    refMaxAge,
+		CookieDomain: cookieDomain,
+		HttpOnly:     httpOnly,
+		AccPath:      accPath,
+		RefPath:      refPath,
+	}
 }
 
 // TokenMetadata holds the results of token generation
@@ -28,62 +56,53 @@ type TokenMetadata struct {
 	RefreshToken string
 }
 
-func GetDefaultCookieConfigs() (CookieConfig, CookieConfig) {
-	// Check if we are in production/secure mode
-	isSecure := config.GetEnv("COOKIE_SECURE") == "true"
-
-	acc := CookieConfig{Secure: isSecure}
-	ref := CookieConfig{Path: "/auth/refresh", Secure: isSecure}
-	return acc, ref
+// SetClearCookies clears the Authorization and RefreshToken cookies from the client when he request for logout or refresh token rotation with invalid tokens
+func (tm *TokenManager) SetClearCookies(c *gin.Context) {
+	c.SetCookie("Authorization", "", -1, tm.AccPath, tm.CookieDomain, tm.isSecure, tm.HttpOnly)
+	c.SetCookie("RefreshToken", "", -1, tm.RefPath, tm.CookieDomain, tm.isSecure, tm.HttpOnly)
 }
 
-func SetClearCookies(c *gin.Context) {
-	accConfig, refConfig := GetDefaultCookieConfigs()
-	c.SetCookie("Authorization", "", -1, accConfig.Path, accConfig.Domain, accConfig.Secure, accConfig.HttpOnly)
-	c.SetCookie("RefreshToken", "", -1, refConfig.Path, refConfig.Domain, refConfig.Secure, refConfig.HttpOnly)
-}
-
-func createAccessToken(UserID uint, accExpiresAt time.Time, jwtSecret string) (string, error) {
+// createAccessToken creates a signed JWT access token
+func (tm *TokenManager) createAccessToken(UserID uint, expAt time.Time) (string, error) {
 	accessTokenID := uuid.New().String()
+
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": UserID,
 		"jti": accessTokenID,
-		"exp": accExpiresAt.Unix(),
+		"exp": expAt.Unix(),
 	})
 
-	return accessToken.SignedString([]byte(jwtSecret))
+	return accessToken.SignedString([]byte(tm.JWTSecret))
 }
 
-func createRefreshToken(UserID uint, refExpiresAt time.Time, jwtSecret string) (string, error) {
+// createRefreshToken creates a signed JWT refresh token
+func (tm *TokenManager) createRefreshToken(UserID uint, expAt time.Time) (string, error) {
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": UserID,
-		"exp": refExpiresAt.Unix(),
+		"exp": expAt.Unix(),
 	})
 
-	return refreshToken.SignedString([]byte(jwtSecret))
+	return refreshToken.SignedString([]byte(tm.JWTSecret))
 }
 
-// GenerateAndSetToken generates access and refresh tokens and sets the access token in a cookie
-func GenerateAndSetToken(
-	c *gin.Context,
-	UserID uint,
-	jwtSecret string,
-) (*TokenMetadata, error) {
-	accExp := config.GetEnvAsInt("JWT_EXPIRATION_SECONDS", 900, true)             // Default 15 mins
-	refExp := config.GetEnvAsInt("REFRESH_TOKEN_EXPIRATION_SECONDS", 86400, true) // Default 24 hours
-
-	accExpiresAt := time.Now().Add(time.Duration(accExp) * time.Second)
-	refExpiresAt := time.Now().Add(time.Duration(refExp) * time.Second)
-	fmt.Printf("Token expiration times set: %v seconds for access, %v seconds for refresh\n", accExp, refExp)
+// GenerateAndSetToken generates access and refresh tokens, stores the refresh token in the database, and sets both tokens in secure cookies
+func (tm *TokenManager) GenerateAndSetToken(c *gin.Context, UserID uint) (*TokenMetadata, error) {
+	// Calculate expiration times
+	accExpiresAt := time.Now().Add(time.Duration(tm.AccMaxAge) * time.Second)
+	refExpiresAt := time.Now().Add(time.Duration(tm.RefMaxAge) * time.Second)
+	fmt.Printf("Token expiration times set: %v seconds for access, %v seconds for refresh\n", tm.AccMaxAge, tm.RefMaxAge)
 
 	// Create tokens
-	accTokenStr, accErr := createAccessToken(UserID, accExpiresAt, jwtSecret)
-	refTokenStr, refErr := createRefreshToken(UserID, refExpiresAt, jwtSecret)
+	accTokenStr, accErr := tm.createAccessToken(UserID, accExpiresAt)
+	refTokenStr, refErr := tm.createRefreshToken(UserID, refExpiresAt)
 
-	if accErr != nil || refErr != nil {
-		// CLEANUP: If token generation fails, clear whatever is currently in the browser if call for cookie rotation
-		SetClearCookies(c)
-		return nil, fmt.Errorf("token generation failed")
+	if accErr != nil {
+		tm.SetClearCookies(c)
+		return nil, fmt.Errorf("Access token generation failed")
+	}
+	if refErr != nil {
+		tm.SetClearCookies(c)
+		return nil, fmt.Errorf("Refresh token generation failed")
 	}
 
 	session := models.Session{
@@ -94,19 +113,16 @@ func GenerateAndSetToken(
 		ExpiresAt:    refExpiresAt,
 	}
 
-	if err := initializers.DB.Create(&session).Error; err != nil {
+	if err := tm.DB.Create(&session).Error; err != nil {
 		// CLEANUP: If DB fails, we must not leave the user with "half-valid" state
-		SetClearCookies(c)
+		tm.SetClearCookies(c)
 		return nil, err
 	}
 
-	accConfig, refConfig := GetDefaultCookieConfigs()
-
 	// Set secure cookies
 	c.SetSameSite(http.SameSiteLaxMode)
-
-	c.SetCookie("Authorization", accTokenStr, accExp, accConfig.Path, accConfig.Domain, accConfig.Secure, accConfig.HttpOnly)
-	c.SetCookie("RefreshToken", refTokenStr, refExp, refConfig.Path, refConfig.Domain, refConfig.Secure, refConfig.HttpOnly)
+	c.SetCookie("Authorization", accTokenStr, tm.AccMaxAge, tm.AccPath, tm.CookieDomain, tm.isSecure, tm.HttpOnly)
+	c.SetCookie("RefreshToken", refTokenStr, tm.RefMaxAge, tm.RefPath, tm.CookieDomain, tm.isSecure, tm.HttpOnly)
 
 	return &TokenMetadata{AccessToken: accTokenStr, RefreshToken: refTokenStr}, nil
 }

@@ -13,12 +13,12 @@ import (
 )
 
 type TokenController struct {
-	DB        *gorm.DB
-	JWTSecret string
+	DB           *gorm.DB
+	TokenManager *utils.TokenManager
 }
 
-func NewTokenController(db *gorm.DB, jwtSecret string) *TokenController {
-	return &TokenController{DB: db, JWTSecret: jwtSecret}
+func NewTokenController(db *gorm.DB, tokenManager *utils.TokenManager) *TokenController {
+	return &TokenController{DB: db, TokenManager: tokenManager}
 }
 
 func (t *TokenController) Validate(c *gin.Context) {
@@ -55,7 +55,7 @@ func (t *TokenController) RefreshToken(c *gin.Context) {
 	// ROTATION: Delete the old session and create a new one
 	t.DB.Unscoped().Delete(&session)
 
-	tokens, err := utils.GenerateAndSetToken(c, session.UserID, t.JWTSecret)
+	tokens, err := t.TokenManager.GenerateAndSetToken(c, session.UserID)
 	if err != nil {
 		log.Printf("Rotation Failure for User %d: %v", session.UserID, err)
 

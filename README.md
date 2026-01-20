@@ -83,7 +83,7 @@ DB_URL=local.db
 
 # JWT & Cleanup Configuration
 JWT_SECRET_KEY=your_jwt_signing_secret
-JWT_EXPIRATION_SECONDS=900
+ACCESS_TOKEN_EXPIRATION_SECONDS=900
 REFRESH_TOKEN_EXPIRATION_SECONDS=604800
 CLEANUP_INTERVAL_MINUTES=30
 
@@ -91,6 +91,7 @@ ENCRYPTION_KEY=your_32_char_hex_key_for_2fa # openssl rand -hex 16
 
 # Security Configuration
 COOKIE_SECURE=false # Set to true for production/HTTPS
+COOKIE_DOMAIN=
 
 # Google OAuth2
 GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com

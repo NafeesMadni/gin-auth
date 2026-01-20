@@ -24,6 +24,7 @@ func GenerateVerificationCode() string {
 	return fmt.Sprintf("%06d", n.Int64())
 }
 
+// SendVerificationEmail sends a verification email for signup with the given code
 func SendVerificationEmail(toEmail string, code string, smtp_config *SMTPConfig) error {
 	from := smtp_config.User
 	password := smtp_config.Password
