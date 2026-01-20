@@ -25,6 +25,7 @@ type MFAController struct {
 func NewMFAController(db *gorm.DB, tokenManager *utils.TokenManager, appName string, encryptionKey string) *MFAController {
 	return &MFAController{
 		DB:            db,
+		TokenManager:  tokenManager,
 		AppName:       appName,
 		EncryptionKey: encryptionKey,
 	}
