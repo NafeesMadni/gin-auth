@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"gin-auth/internals/config"
 	"gin-auth/internals/models"
 
 	"github.com/gin-gonic/gin"
@@ -17,18 +18,14 @@ import (
 type TokenManager struct {
 	// DB is the database connection used for storing sessions
 	DB *gorm.DB
+	// CookieConfig holds the shared security baseline for all cookies issued by the server
+	CookieConfig *config.CookieConfig
 	// JWTSecret is the secret key used for signing tokens (Access and Refresh)
 	JWTSecret string
-	// isSecure indicates if cookies should be marked as Secure
-	isSecure bool
 	// AccMaxAge is the expiration time in seconds for Access tokens
 	AccMaxAge int
 	// RefMaxAge is the expiration time in seconds for Refresh tokens
 	RefMaxAge int
-	// Domain for the cookies (Access and Refresh)
-	CookieDomain string
-	// HttpOnly indicates if cookies should be marked as HttpOnly
-	HttpOnly bool
 	// AccPath for the Access token
 	AccPath string
 	// RefPath for the Refresh token
@@ -36,15 +33,13 @@ type TokenManager struct {
 }
 
 // NewTokenManager initializes and returns a new TokenManager instance
-func NewTokenManager(db *gorm.DB, jwtSecret string, isSecure bool, accMaxAge int, refMaxAge int, cookieDomain string, httpOnly bool, accPath string, refPath string) *TokenManager {
+func NewTokenManager(db *gorm.DB, cookieConfig *config.CookieConfig, jwtSecret string, accMaxAge int, refMaxAge int, accPath string, refPath string) *TokenManager {
 	return &TokenManager{
 		DB:           db,
+		CookieConfig: cookieConfig,
 		JWTSecret:    jwtSecret,
-		isSecure:     isSecure,
 		AccMaxAge:    accMaxAge,
 		RefMaxAge:    refMaxAge,
-		CookieDomain: cookieDomain,
-		HttpOnly:     httpOnly,
 		AccPath:      accPath,
 		RefPath:      refPath,
 	}
@@ -58,8 +53,8 @@ type TokenMetadata struct {
 
 // SetClearCookies clears the Authorization and RefreshToken cookies from the client when he request for logout or refresh token rotation with invalid tokens
 func (tm *TokenManager) SetClearCookies(c *gin.Context) {
-	c.SetCookie("Authorization", "", -1, tm.AccPath, tm.CookieDomain, tm.isSecure, tm.HttpOnly)
-	c.SetCookie("RefreshToken", "", -1, tm.RefPath, tm.CookieDomain, tm.isSecure, tm.HttpOnly)
+	c.SetCookie("Authorization", "", -1, tm.AccPath, tm.CookieConfig.Domain, tm.CookieConfig.IsSecure, tm.CookieConfig.HttpOnly)
+	c.SetCookie("RefreshToken", "", -1, tm.RefPath, tm.CookieConfig.Domain, tm.CookieConfig.IsSecure, tm.CookieConfig.HttpOnly)
 }
 
 // createAccessToken creates a signed JWT access token
@@ -121,8 +116,8 @@ func (tm *TokenManager) GenerateAndSetToken(c *gin.Context, UserID uint) (*Token
 
 	// Set secure cookies
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", accTokenStr, tm.AccMaxAge, tm.AccPath, tm.CookieDomain, tm.isSecure, tm.HttpOnly)
-	c.SetCookie("RefreshToken", refTokenStr, tm.RefMaxAge, tm.RefPath, tm.CookieDomain, tm.isSecure, tm.HttpOnly)
+	c.SetCookie("Authorization", accTokenStr, tm.AccMaxAge, tm.AccPath, tm.CookieConfig.Domain, tm.CookieConfig.IsSecure, tm.CookieConfig.HttpOnly)
+	c.SetCookie("RefreshToken", refTokenStr, tm.RefMaxAge, tm.RefPath, tm.CookieConfig.Domain, tm.CookieConfig.IsSecure, tm.CookieConfig.HttpOnly)
 
 	return &TokenMetadata{AccessToken: accTokenStr, RefreshToken: refTokenStr}, nil
 }

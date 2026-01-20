@@ -13,11 +13,12 @@ import (
 func SetupRouter(db *gorm.DB) *gin.Engine {
 	r := gin.Default()
 
+	// Load environment variables
+
+	signup_verify_path := config.GetEnvAsStr("SIGNUP_SESSION_PATH", "/signup/verify")
 	appName := config.GetEnvAsStr("APP_NAME", "Gin-Auth")
 	encryptionKey := config.GetEnv("ENCRYPTION_KEY")
 	JWTSecret := config.GetEnv("JWT_SECRET_KEY")
-	accMaxAge := config.GetEnvAsInt("ACCESS_TOKEN_EXPIRATION_SECONDS", 900, true)    // Default 15 mins
-	refMaxAge := config.GetEnvAsInt("REFRESH_TOKEN_EXPIRATION_SECONDS", 86400, true) // Default 24 hours
 
 	smtpSettings := &utils.SMTPConfig{
 		Host:     "smtp.gmail.com",
@@ -31,21 +32,22 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	// JWT & Cookie Token Manager
 	tokenManager := utils.NewTokenManager(
 		db,
+		&config.CookieConfig{
+			Domain:   config.GetEnvAsStr("DOMAIN", ""),
+			IsSecure: config.GetEnvAsStr("SECURE_COOKIE", "true") == "true",
+			HttpOnly: true, // Always HttpOnly set to true for security
+		},
 		JWTSecret,
-		config.GetEnvAsStr("COOKIE_SECURE", "true") == "true",
-		accMaxAge,
-		refMaxAge,
-		config.GetEnvAsStr("COOKIE_DOMAIN", ""),
-		true, // HttpOnly: CRITICAL for XSS protection - Always true
-		"",
-		"/auth/refresh",
+		config.GetEnvAsInt("ACCESS_TOKEN_EXPIRATION_SECONDS", 900, true),    // Default 15 mins
+		config.GetEnvAsInt("REFRESH_TOKEN_EXPIRATION_SECONDS", 86400, true), // Default 24 hours
+		config.GetEnvAsStr("ACCESS_TOKEN_PATH", ""),
+		config.GetEnvAsStr("REFRESH_TOKEN_PATH", "/auth/refresh"), // specific to the route path of tokenCtrl.RefreshToken endpont
 	)
 
 	// Instantiate the "Class"
 	authMiddleware := middleware.NewRequireAuthMiddleware(db, JWTSecret)
-
 	googleAuthCtrl := controllers.NewGoogleAuthController(db, tokenManager)
-	authCtrl := controllers.NewAuthController(db, smtpSettings, tokenManager)
+	authCtrl := controllers.NewAuthController(db, smtpSettings, tokenManager, signup_verify_path)
 	mfaCtrl := controllers.NewMFAController(db, tokenManager, appName, encryptionKey)
 	tokenCtrl := controllers.NewTokenController(db, tokenManager)
 	verifyCtrl := controllers.NewVerificationController(db, smtpSettings)
@@ -59,9 +61,20 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 				"message":     "Gin-Auth API is running",
 			})
 		})
-		public.POST("/signup", authCtrl.Signup)
-		public.POST("/verify", verifyCtrl.VerifyEmail)
-		public.POST("/resend-code", verifyCtrl.ResendVerificationCode)
+		signup := public.Group("signup")
+		{
+			// Path: /signup (No cookie sent here)
+			signup.POST("/", authCtrl.Signup)
+
+			// Verification Sub-group
+			// Path Prefix: /signup/verify
+			// Set SignupPath to "/signup/verify" in your .env
+			verify := signup.Group("/verify")
+			{
+				verify.POST("/", verifyCtrl.VerifyEmail)
+				verify.POST("/resend", verifyCtrl.ResendVerificationCode)
+			}
+		}
 		public.POST("/login", authCtrl.Login)
 		public.POST("/2fa/login-verify", mfaCtrl.LoginVerify2FA)
 	}
