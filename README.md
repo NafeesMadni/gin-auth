@@ -7,11 +7,11 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 ### 🚀 Key Features
 
 * **Modular Architecture:** Utilizes **Dependency Injection** to manage database connections, SMTP configurations, and security secrets across decoupled controller structs.
+* **Session-Bound Signup:** Implements **Signup-Session locking** via path-restricted cookies to prevent verification hijacking and race-condition exploits.
 * **Multi-Factor Authentication (2FA):** Secure TOTP (Time-based One-Time Password) implementation with AES-256-GCM encryption for secrets at rest.
-* **Secure Authentication:** Standard Signup/Login with password hashing using Bcrypt.
+* **Path-Restricted Cookies:** Enhances security by restricting sensitive tokens (Refresh, Signup-Session) to specific API paths.
 * **Two-Step Secure Login:** Enhanced `/login` flow that detects MFA status and requires a secondary verification step via `/2fa/login-verify` before issuing session cookies.
-* **Email Verification:** Integration with Gmail SMTP to verify user accounts via OTP with built-in cooldown logic.
-* **Signup Collision Handling:** Intelligent logic to handle duplicate registration attempts for verified vs. unverified users.
+* **Email Verification:** Integration with Gmail SMTP to verify accounts via OTP with intelligent **Upsert-aware** signup logic for expired codes.
 * **Google OAuth2:** Seamless social login integration handled via a dedicated controller.
 * **Refresh Token Rotation:** High-security session management that rotates tokens on every refresh to prevent replay attacks.
 * **Hybrid Logout:** Supports stateful session revocation and stateless JTI blacklisting.
@@ -35,9 +35,9 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 ```text
 .
 ├── internals/
-│   ├── config/       # New: Low-level environment and config helpers
+│   ├── config/       # Low-Level shared configuration (CookieConfig, Env helpers)
 │   ├── controllers/  # Struct-based handlers (Auth, MFA, Google, Token)
-│   ├── initializers/ # DB, Env and Background Janitor service
+│   ├── initializers/ # DB initialization, load Env, and Background Janitor service
 │   ├── middleware/   # JWT/MFA verification and Blacklist checking
 │   ├── models/       # GORM schemas (User, Session, Blacklist)
 │   └── utils/        # TokenManager, Crypto, and Email logic
@@ -75,37 +75,9 @@ To enable email verification, you must use a Google **App Password**. Google blo
 
 #### 2. Configuration
 
-Create a `.env` file in the root directory:
-
-```env
-APP_NAME=your_app_name
-PORT=3000
-DB_URL=local.db
-
-# Security & JWT Configuration
-JWT_SECRET_KEY=your_jwt_signing_secret
-ENCRYPTION_KEY=your_32_char_hex_key_for_2fa # openssl rand -hex 16
-ACCESS_TOKEN_EXPIRATION_SECONDS=900
-REFRESH_TOKEN_EXPIRATION_SECONDS=604800
-
-# Cookie Configuration
-COOKIE_SECURE=false # Set to true for production/HTTPS
-COOKIE_DOMAIN=""
-
-# Background Cleanup
-CLEANUP_INTERVAL_MINUTES=30
-
-# Google OAuth2
-GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your_secret
-GOOGLE_REDIRECT_URL=http://localhost:3000/auth/google/callback
-
-# Gmail SMTP
-GMAIL_USER=your_email@gmail.com
-GMAIL_APP_PASSWORD=your_16_char_app_password
-VERIFICATION_EXPIRATION_MINUTES=10
-
-```
+   1. **Rename the file**: Find `.env.example` in your root directory and rename it to `.env`.
+   2. **Generate Secrets**: Use a secure method to generate your `JWT_SECRET_KEY` and `ENCRYPTION_KEY` (e.g., `openssl rand -hex 32`).
+   3. **Set Cookie Paths**: Ensure the paths match your new **nested routing structure** to maintain session isolation.
 
 #### 3. Running the Project
 
@@ -118,6 +90,7 @@ go run main.go
 
 ```
 
+
 ---
 
 ### 🧪 API Endpoints
@@ -129,11 +102,11 @@ Managed by `AuthController`, `VerificationController`, and `MFAController`.
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/` | **Health Check**: System status and metadata. |
-| `POST` | `/signup` | Creates account and triggers email verification. |
-| `POST` | `/verify` | Validates email OTP and activates account. |
-| `POST` | `/resend-code` | Requests a fresh verification code (1-min cooldown). |
-| `POST` | `/login` | **Gateway**: Checks password. Returns `mfa_required: true` if 2FA is active. |
-| `POST` | `/2fa/login-verify` | **MFA Step 2**: Validates Authenticator App code to finalize session. |
+| `POST` | `/signup` | **Upsert-aware**: Creates and delete unverified accounts & sets Signup cookie. |
+| `POST` | `/signup/verify` | Validates email OTP against the specific `SignupID` session. |
+| `POST` | `/signup/verify/resend` | Requests new code for the **active** signup session. |
+| `POST` | `/login` | Checks password. Returns `mfa_required` if 2FA is active. |
+| `POST` | `/2fa/login-verify` | Validates Authenticator App code to finalize session. |
 
 #### **Protected Routes (Requires JWT)**
 

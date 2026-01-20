@@ -24,8 +24,14 @@ func NewVerificationController(db *gorm.DB, smtp_config *utils.SMTPConfig) *Veri
 }
 
 func (v *VerificationController) VerifyEmail(c *gin.Context) {
+	cookieID, err := c.Cookie("Signup-Session")
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired. Please sign up again."})
+		return
+	}
+
 	var body struct {
-		Email string `json:"email"`
+		Email string `json:"email" binding:"required,email`
 		Code  string `json:"code"`
 	}
 
@@ -35,8 +41,9 @@ func (v *VerificationController) VerifyEmail(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := v.DB.Where("email = ?", body.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User not found"})
+	if err := v.DB.Where("email = ? AND signup_id = ?", body.Email, cookieID).First(&user).Error; err != nil {
+		// If the hacker initiated the last signup, the cookie won't match the DB
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid verification session. Please sign up again."})
 		return
 	}
 
@@ -68,6 +75,12 @@ func (v *VerificationController) VerifyEmail(c *gin.Context) {
 
 // ResendVerificationCode handles requests to resend the verification code to the user's email for signups confirmation.
 func (v *VerificationController) ResendVerificationCode(c *gin.Context) {
+	cookieID, err := c.Cookie("Signup-Session")
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired. Please sign up again."})
+		return
+	}
+
 	var body struct {
 		Email string `json:"email" binding:"required,email"`
 	}
@@ -78,10 +91,10 @@ func (v *VerificationController) ResendVerificationCode(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := v.DB.Where("email = ?", body.Email).First(&user).Error; err != nil {
+	if err := v.DB.Where("email = ? AND signup_id = ?", body.Email, cookieID).First(&user).Error; err != nil {
 		// Security: Use a generic success message to prevent account enumeration
 		// This way, attackers cannot determine if an email is registered or not
-		c.JSON(http.StatusOK, gin.H{"message": "If this email is registered, a new code has been sent."})
+		c.JSON(http.StatusOK, gin.H{"error": "If the session is valid, a new code has been sent."})
 		return
 	}
 
