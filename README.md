@@ -1,17 +1,18 @@
 ## Gin Auth & OAuth2 Project
 
-This repository contains a robust, production-ready **Go (Gin)** authentication backend. It features standard email/password authentication, Google OAuth2 integration, and a sophisticated session management system with automated background cleanup.
+This repository contains a robust, production-ready **Go (Gin)** authentication backend. It features a modern **struct-based controller architecture** for scalable dependency management, standard email/password authentication, Google OAuth2 integration, and sophisticated session management.
 
 ---
 
 ### 🚀 Key Features
 
+* **Modular Architecture:** Utilizes **Dependency Injection** to manage database connections, SMTP configurations, and security secrets across decoupled controller structs.
 * **Multi-Factor Authentication (2FA):** Secure TOTP (Time-based One-Time Password) implementation with AES-256-GCM encryption for secrets at rest.
 * **Secure Authentication:** Standard Signup/Login with password hashing using Bcrypt.
-* **Two-Step Secure Login**: Enhanced `/login` flow that detects MFA status and requires a secondary verification step via `/2fa/login-verify` before issuing session cookies.
+* **Two-Step Secure Login:** Enhanced `/login` flow that detects MFA status and requires a secondary verification step via `/2fa/login-verify` before issuing session cookies.
 * **Email Verification:** Integration with Gmail SMTP to verify user accounts via OTP with built-in cooldown logic.
 * **Signup Collision Handling:** Intelligent logic to handle duplicate registration attempts for verified vs. unverified users.
-* **Google OAuth2:** Seamless social login integration.
+* **Google OAuth2:** Seamless social login integration handled via a dedicated controller.
 * **Refresh Token Rotation:** High-security session management that rotates tokens on every refresh to prevent replay attacks.
 * **Hybrid Logout:** Supports stateful session revocation and stateless JTI blacklisting.
 * **Automated Maintenance:** Background "janitor" goroutine to purge expired sessions, blacklist entries, and abandoned unverified accounts.
@@ -34,15 +35,15 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 ```text
 .
 ├── internals/
-│   ├── controllers/  # Auth, OAuth, 2FA, and User logic
-│   ├── initializers/ # DB, Env, and Background Janitor
+│   ├── config/       # New: Low-level environment and config helpers
+│   ├── controllers/  # Struct-based handlers (Auth, MFA, Google, Token)
+│   ├── initializers/ # DB, Env and Background Janitor service
 │   ├── middleware/   # JWT/MFA verification and Blacklist checking
 │   ├── models/       # GORM schemas (User, Session, Blacklist)
-│   └── utils/        # Crypto, Token generation, Emailing & helpers
+│   └── utils/        # TokenManager, Crypto, and Email logic
 ├── main.go           # Application entry point
 ├── .air.toml         # Hot reload configuration
-└── .env.example      # Environment variables example
-
+└── .env.example      # Environment variables 
 ```
 
 ---
@@ -81,17 +82,18 @@ APP_NAME=your_app_name
 PORT=3000
 DB_URL=local.db
 
-# JWT & Cleanup Configuration
+# Security & JWT Configuration
 JWT_SECRET_KEY=your_jwt_signing_secret
+ENCRYPTION_KEY=your_32_char_hex_key_for_2fa # openssl rand -hex 16
 ACCESS_TOKEN_EXPIRATION_SECONDS=900
 REFRESH_TOKEN_EXPIRATION_SECONDS=604800
-CLEANUP_INTERVAL_MINUTES=30
 
-ENCRYPTION_KEY=your_32_char_hex_key_for_2fa # openssl rand -hex 16
-
-# Security Configuration
+# Cookie Configuration
 COOKIE_SECURE=false # Set to true for production/HTTPS
-COOKIE_DOMAIN=
+COOKIE_DOMAIN=""
+
+# Background Cleanup
+CLEANUP_INTERVAL_MINUTES=30
 
 # Google OAuth2
 GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com
@@ -122,13 +124,15 @@ go run main.go
 
 #### **Public Routes**
 
+Managed by `AuthController`, `VerificationController`, and `MFAController`.
+
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/` | **Health Check**: System status and metadata. |
 | `POST` | `/signup` | Creates account and triggers email verification. |
 | `POST` | `/verify` | Validates email OTP and activates account. |
 | `POST` | `/resend-code` | Requests a fresh verification code (1-min cooldown). |
-| `POST` | `/login` | **Gateway**: Checks password. Returns mfa_required: true if 2FA is active. |
+| `POST` | `/login` | **Gateway**: Checks password. Returns `mfa_required: true` if 2FA is active. |
 | `POST` | `/2fa/login-verify` | **MFA Step 2**: Validates Authenticator App code to finalize session. |
 
 #### **Protected Routes (Requires JWT)**
@@ -142,9 +146,11 @@ go run main.go
 
 #### **Auth Routes**
 
+Managed by `GoogleAuthController` and `TokenController`.
+
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/auth/refresh` | **Rotation**: Exchanges old refresh token for new pair. |
+| `POST` | `/auth/refresh` | **Rotation**: Exchanges old refresh token for new pair via `TokenManager`. |
 | `GET` | `/auth/google/login` | Redirects to Google Consent screen. |
 | `GET` | `/auth/google/callback` | Finalizes Google OAuth2 authentication. |
 
