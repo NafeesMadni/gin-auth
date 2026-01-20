@@ -16,18 +16,16 @@ import (
 )
 
 type AuthController struct {
-	DB        *gorm.DB
-	Config    *utils.SMTPConfig
-	JWTSecret string
-	AccMaxAge int
+	DB           *gorm.DB
+	Config       *utils.SMTPConfig
+	TokenManager *utils.TokenManager
 }
 
-func NewAuthController(db *gorm.DB, smtp_config *utils.SMTPConfig, jwtSecret string, accMaxAge int) *AuthController {
+func NewAuthController(db *gorm.DB, smtp_config *utils.SMTPConfig, tokenManager *utils.TokenManager) *AuthController {
 	return &AuthController{
-		DB:        db,
-		Config:    smtp_config,
-		JWTSecret: jwtSecret,
-		AccMaxAge: accMaxAge,
+		DB:           db,
+		Config:       smtp_config,
+		TokenManager: tokenManager,
 	}
 }
 
@@ -131,7 +129,7 @@ func (a *AuthController) Login(c *gin.Context) {
 	}
 
 	// Standard Login (No 2FA): Create Session & Set Cookies
-	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID, a.JWTSecret)
+	tokenMetadata, err := a.TokenManager.GenerateAndSetToken(c, user.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
 		return
@@ -162,7 +160,7 @@ func (a *AuthController) Logout(c *gin.Context) {
 	// Blacklist the access token
 	if acctokenStr != "" {
 		token, _ := jwt.Parse(acctokenStr, func(t *jwt.Token) (interface{}, error) {
-			return []byte(a.JWTSecret), nil
+			return []byte(a.TokenManager.JWTSecret), nil
 		})
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
@@ -173,7 +171,7 @@ func (a *AuthController) Logout(c *gin.Context) {
 				if exp, ok := claims["exp"].(float64); ok {
 					expireAt = time.Unix(int64(exp), 0)
 				} else {
-					expSeconds := a.AccMaxAge
+					expSeconds := a.TokenManager.AccMaxAge
 					expireAt = time.Now().Add(time.Duration(expSeconds) * time.Second)
 				}
 
@@ -185,6 +183,6 @@ func (a *AuthController) Logout(c *gin.Context) {
 			}
 		}
 	}
-	utils.SetClearCookies(c)
+	a.TokenManager.SetClearCookies(c)
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }

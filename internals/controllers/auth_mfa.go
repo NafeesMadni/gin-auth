@@ -15,17 +15,16 @@ import (
 )
 
 type MFAController struct {
-	DB        *gorm.DB
-	JWTSecret string
+	DB           *gorm.DB
+	TokenManager *utils.TokenManager
 	// AppName is the name of the application used for TOTP issuer
 	AppName       string
 	EncryptionKey string
 }
 
-func NewMFAController(db *gorm.DB, jwtSecret string, appName string, encryptionKey string) *MFAController {
+func NewMFAController(db *gorm.DB, tokenManager *utils.TokenManager, appName string, encryptionKey string) *MFAController {
 	return &MFAController{
 		DB:            db,
-		JWTSecret:     jwtSecret,
 		AppName:       appName,
 		EncryptionKey: encryptionKey,
 	}
@@ -127,7 +126,7 @@ func (m *MFAController) LoginVerify2FA(c *gin.Context) {
 	}
 
 	// Success! Create the final session and set JWT cookies
-	tokenMetadata, err := utils.GenerateAndSetToken(c, user.ID, m.JWTSecret)
+	tokenMetadata, err := m.TokenManager.GenerateAndSetToken(c, user.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
 		return

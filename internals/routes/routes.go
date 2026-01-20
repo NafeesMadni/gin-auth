@@ -13,10 +13,11 @@ import (
 func SetupRouter(db *gorm.DB) *gin.Engine {
 	r := gin.Default()
 
-	jwtSecret := config.GetEnv("JWT_SECRET_KEY")
-	accMaxAge := config.GetEnvAsInt("JWT_EXPIRATION_SECONDS", 86400, true) // Default 24 hours
 	appName := config.GetEnvAsStr("APP_NAME", "Gin-Auth")
 	encryptionKey := config.GetEnv("ENCRYPTION_KEY")
+	JWTSecret := config.GetEnv("JWT_SECRET_KEY")
+	accMaxAge := config.GetEnvAsInt("ACCESS_TOKEN_EXPIRATION_SECONDS", 900, true)    // Default 15 mins
+	refMaxAge := config.GetEnvAsInt("REFRESH_TOKEN_EXPIRATION_SECONDS", 86400, true) // Default 24 hours
 
 	smtpSettings := &utils.SMTPConfig{
 		Host:     "smtp.gmail.com",
@@ -27,13 +28,26 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 		CodeExp:  config.GetEnvAsInt("VERIFICATION_EXPIRATION_MINUTES", 10, true),
 	}
 
-	// Instantiate the "Class"
-	authMiddleware := middleware.NewRequireAuthMiddleware(db, jwtSecret)
+	// JWT & Cookie Token Manager
+	tokenManager := utils.NewTokenManager(
+		db,
+		JWTSecret,
+		config.GetEnvAsStr("COOKIE_SECURE", "true") == "true",
+		accMaxAge,
+		refMaxAge,
+		config.GetEnvAsStr("COOKIE_DOMAIN", ""),
+		true,
+		"",
+		"/auth/refresh",
+	)
 
-	googleAuthCtrl := controllers.NewGoogleAuthController(db, jwtSecret)
-	authCtrl := controllers.NewAuthController(db, smtpSettings, jwtSecret, accMaxAge)
-	mfaCtrl := controllers.NewMFAController(db, jwtSecret, appName, encryptionKey)
-	tokenCtrl := controllers.NewTokenController(db, jwtSecret)
+	// Instantiate the "Class"
+	authMiddleware := middleware.NewRequireAuthMiddleware(db, JWTSecret)
+
+	googleAuthCtrl := controllers.NewGoogleAuthController(db, tokenManager)
+	authCtrl := controllers.NewAuthController(db, smtpSettings, tokenManager)
+	mfaCtrl := controllers.NewMFAController(db, tokenManager, appName, encryptionKey)
+	tokenCtrl := controllers.NewTokenController(db, tokenManager)
 	verifyCtrl := controllers.NewVerificationController(db, smtpSettings)
 
 	public := r.Group("/")
