@@ -59,7 +59,8 @@ func (v *VerificationController) VerifyEmail(c *gin.Context) {
 	// Mark as verified
 	v.DB.Model(&user).Updates(map[string]interface{}{
 		"IsVerified":       true,
-		"VerificationCode": "", // Clear the code after use
+		"VerificationCode": "",          // Clear the code after use
+		"CodeExpiresAt":    time.Time{}, // Clear the expiration time
 	})
 
 	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
