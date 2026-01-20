@@ -36,7 +36,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 		accMaxAge,
 		refMaxAge,
 		config.GetEnvAsStr("COOKIE_DOMAIN", ""),
-		true,
+		true, // HttpOnly: CRITICAL for XSS protection - Always true
 		"",
 		"/auth/refresh",
 	)
