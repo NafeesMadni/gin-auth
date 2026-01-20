@@ -91,6 +91,7 @@ ENCRYPTION_KEY=your_32_char_hex_key_for_2fa # openssl rand -hex 16
 
 # Security Configuration
 COOKIE_SECURE=false # Set to true for production/HTTPS
+COOKIE_DOMAIN=
 
 # Google OAuth2
 GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com
