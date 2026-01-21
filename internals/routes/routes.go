@@ -15,7 +15,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 
 	// Load environment variables
 
-	signup_verify_path := config.GetEnvAsStr("SIGNUP_SESSION_PATH", "/signup/verify")
+	signup_verify_path := config.GetEnvAsStr("SIGNUP_SESSION_PATH", "/signup/otp")
 	appName := config.GetEnvAsStr("APP_NAME", "Gin-Auth")
 	encryptionKey := config.GetEnv("ENCRYPTION_KEY")
 	JWTSecret := config.GetEnv("JWT_SECRET_KEY")
@@ -67,12 +67,12 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			signup.POST("/", authCtrl.Signup)
 
 			// Verification Sub-group
-			// Path Prefix: /signup/verify
-			// Set SignupPath to "/signup/verify" in your .env
-			verify := signup.Group("/verify")
+			// Path Prefix: /signup/otp
+			// Set SignupPath to "/signup/otp" in your .env
+			otp := signup.Group("/otp")
 			{
-				verify.POST("/", verifyCtrl.VerifyEmail)
-				verify.POST("/resend", verifyCtrl.ResendVerificationCode)
+				otp.POST("/verify", verifyCtrl.VerifyEmail)
+				otp.POST("/resend", verifyCtrl.ResendVerificationCode)
 			}
 		}
 		public.POST("/login", authCtrl.Login)

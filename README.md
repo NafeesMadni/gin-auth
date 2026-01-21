@@ -103,8 +103,8 @@ Managed by `AuthController`, `VerificationController`, and `MFAController`.
 | --- | --- | --- |
 | `GET` | `/` | **Health Check**: System status and metadata. |
 | `POST` | `/signup` | **Upsert-aware**: Creates and delete unverified accounts & sets Signup cookie. |
-| `POST` | `/signup/verify` | Validates email OTP against the specific `SignupID` session. |
-| `POST` | `/signup/verify/resend` | Requests new code for the **active** signup session. |
+| `POST` | `/signup/otp/verify` | Validates email OTP against the specific `SignupID` session. |
+| `POST` | `/signup/otp/resend` | Requests new code for the **active** signup session. |
 | `POST` | `/login` | Checks password. Returns `mfa_required` if 2FA is active. |
 | `POST` | `/2fa/login-verify` | Validates Authenticator App code to finalize session. |
 
