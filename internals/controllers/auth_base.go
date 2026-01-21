@@ -148,6 +148,59 @@ func (a *AuthController) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Logged in successfully", "access_token": tokenMetadata.AccessToken, "refresh_token": tokenMetadata.RefreshToken})
 }
 
+func (a *AuthController) RequestLoginCode(c *gin.Context) {
+	var body struct {
+		Email string
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
+		return
+	}
+
+	var user models.User
+	if err := a.DB.Where("email = ?", body.Email).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Account not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
+
+	if !user.IsVerified {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Email is not verified"})
+		return
+	}
+
+	// --- Generate Login Challenge ---
+	challengeID := uuid.New().String()
+	code := a.EmailManager.GenerateVerificationCode()
+	expMinutes := a.EmailManager.Config.CodeExp
+
+	lc := models.LoginChallenge{
+		Email:            body.Email,
+		ChallengeID:      challengeID,
+		VerificationCode: code,
+		CodeExpiresAt:    time.Now().Add(time.Duration(expMinutes) * time.Minute),
+	}
+
+	result := a.DB.Create(&lc)
+
+	if result.Error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to send OTP!"})
+		return
+	}
+
+	c.SetCookie("Login-Session", challengeID, 600, a.CookieConfig.Domain, a.SignupVerifyPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
+
+	go a.EmailManager.SendLoginOTP(lc.Email, code)
+	c.JSON(http.StatusOK, gin.H{
+		"message":       fmt.Sprintf("Verification code sent to %s. Expires in %d minutes.", body.Email, expMinutes),
+		"login_session": challengeID,
+	})
+}
+
 func (a *AuthController) Logout(c *gin.Context) {
 	acctokenStr, accErr := c.Cookie("Authorization")
 	reftokenStr, refErr := c.Cookie("RefreshToken")

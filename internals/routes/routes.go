@@ -78,6 +78,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			}
 		}
 		public.POST("/login", authCtrl.Login)
+		public.POST("/request-login-otp", authCtrl.RequestLoginCode)
 		public.POST("/2fa/login-verify", mfaCtrl.LoginVerify2FA)
 	}
 

@@ -14,8 +14,8 @@ func SyncDatabase() {
 		&models.User{},
 		&models.Blacklist{},
 		&models.Session{},
+		&models.LoginChallenge{},
 	)
-
 	if err != nil {
 		panic("Failed to migrate database")
 	}
