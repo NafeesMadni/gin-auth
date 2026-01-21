@@ -12,14 +12,14 @@ import (
 )
 
 type VerificationController struct {
-	DB     *gorm.DB
-	Config *utils.SMTPConfig
+	DB           *gorm.DB
+	EmailManager *utils.EmailManager
 }
 
-func NewVerificationController(db *gorm.DB, smtp_config *utils.SMTPConfig) *VerificationController {
+func NewVerificationController(db *gorm.DB, emailManager *utils.EmailManager) *VerificationController {
 	return &VerificationController{
-		DB:     db,
-		Config: smtp_config,
+		DB:           db,
+		EmailManager: emailManager,
 	}
 }
 
@@ -110,14 +110,14 @@ func (v *VerificationController) ResendVerificationCode(c *gin.Context) {
 		return
 	}
 
-	newCode := utils.GenerateVerificationCode()
+	newCode := v.EmailManager.GenerateVerificationCode()
 
 	v.DB.Model(&user).Updates(models.User{
 		VerificationCode: newCode,
-		CodeExpiresAt:    time.Now().Add(time.Duration(v.Config.CodeExp) * time.Minute),
+		CodeExpiresAt:    time.Now().Add(time.Duration(v.EmailManager.Config.CodeExp) * time.Minute),
 	})
 
-	go utils.SendVerificationEmail(user.Email, newCode, v.Config)
+	go v.EmailManager.SendSignupOTP(user.Email, newCode)
 
 	c.JSON(http.StatusOK, gin.H{"message": "A new verification code has been sent to your email"})
 }

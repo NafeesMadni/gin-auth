@@ -19,16 +19,16 @@ import (
 
 type AuthController struct {
 	DB               *gorm.DB
-	Config           *utils.SMTPConfig
+	EmailManager     *utils.EmailManager
 	TokenManager     *utils.TokenManager
 	CookieConfig     *config.CookieConfig
 	SignupVerifyPath string
 }
 
-func NewAuthController(db *gorm.DB, smtp_config *utils.SMTPConfig, tokenManager *utils.TokenManager, signupVerifyPath string) *AuthController {
+func NewAuthController(db *gorm.DB, emailManager *utils.EmailManager, tokenManager *utils.TokenManager, signupVerifyPath string) *AuthController {
 	return &AuthController{
 		DB:               db,
-		Config:           smtp_config,
+		EmailManager:     emailManager,
 		TokenManager:     tokenManager,
 		SignupVerifyPath: signupVerifyPath,
 		CookieConfig:     tokenManager.CookieConfig,
@@ -63,8 +63,8 @@ func (a *AuthController) Signup(c *gin.Context) {
 	}
 
 	signupID := uuid.New().String() // Unique ID for specific attempt
-	code := utils.GenerateVerificationCode()
-	expirationMinutes := a.Config.CodeExp
+	code := a.EmailManager.GenerateVerificationCode()
+	expirationMinutes := a.EmailManager.Config.CodeExp
 
 	newUser := models.User{
 		Email:            body.Email,
@@ -85,7 +85,7 @@ func (a *AuthController) Signup(c *gin.Context) {
 	c.SetCookie("Signup-Session", signupID, 600, a.CookieConfig.Domain, a.SignupVerifyPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
 
 	// Send the email in a background goroutine so the response isn't slow
-	go utils.SendVerificationEmail(newUser.Email, code, a.Config)
+	go a.EmailManager.SendSignupOTP(newUser.Email, code)
 
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Please check your email for the verification code. The code will expires in %d minutes.", expirationMinutes), "signup_session": signupID})
 }

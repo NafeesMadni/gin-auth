@@ -20,14 +20,16 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	encryptionKey := config.GetEnv("ENCRYPTION_KEY")
 	JWTSecret := config.GetEnv("JWT_SECRET_KEY")
 
-	smtpSettings := &utils.SMTPConfig{
-		Host:     "smtp.gmail.com",
-		Port:     587,
-		User:     config.GetEnv("GMAIL_USER"),
-		Password: config.GetEnv("GMAIL_APP_PASSWORD"),
-		AppName:  appName,
-		CodeExp:  config.GetEnvAsInt("VERIFICATION_EXPIRATION_MINUTES", 10, true),
-	}
+	emailManager := utils.NewEmailManager(
+		&utils.SMTPConfig{
+			Host:     "smtp.gmail.com",
+			Port:     587,
+			User:     config.GetEnv("GMAIL_USER"),
+			Password: config.GetEnv("GMAIL_APP_PASSWORD"),
+			AppName:  appName,
+			CodeExp:  config.GetEnvAsInt("VERIFICATION_EXPIRATION_MINUTES", 10, true),
+		},
+	)
 
 	// JWT & Cookie Token Manager
 	tokenManager := utils.NewTokenManager(
@@ -47,10 +49,10 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	// Instantiate the "Class"
 	authMiddleware := middleware.NewRequireAuthMiddleware(db, JWTSecret)
 	googleAuthCtrl := controllers.NewGoogleAuthController(db, tokenManager)
-	authCtrl := controllers.NewAuthController(db, smtpSettings, tokenManager, signup_verify_path)
+	authCtrl := controllers.NewAuthController(db, emailManager, tokenManager, signup_verify_path)
 	mfaCtrl := controllers.NewMFAController(db, tokenManager, appName, encryptionKey)
 	tokenCtrl := controllers.NewTokenController(db, tokenManager)
-	verifyCtrl := controllers.NewVerificationController(db, smtpSettings)
+	verifyCtrl := controllers.NewVerificationController(db, emailManager)
 
 	public := r.Group("/")
 	{
