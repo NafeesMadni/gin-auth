@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gin-auth/internals/models"
+	"gin-auth/internals/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -12,26 +13,26 @@ import (
 )
 
 type RequireAuthMiddleware struct {
-	DB        *gorm.DB
-	JWTSecret string
+	DB           *gorm.DB
+	TokenManager *utils.TokenManager
 }
 
-func NewRequireAuthMiddleware(db *gorm.DB, jwtSecret string) *RequireAuthMiddleware {
+func NewRequireAuthMiddleware(db *gorm.DB, tokenManager *utils.TokenManager) *RequireAuthMiddleware {
 	return &RequireAuthMiddleware{
-		DB:        db,
-		JWTSecret: jwtSecret,
+		DB:           db,
+		TokenManager: tokenManager,
 	}
 }
 
 func (m *RequireAuthMiddleware) RequireAuth(c *gin.Context) {
-	tokenString, err := c.Cookie("Authorization")
+	tokenString, err := c.Cookie(m.TokenManager.Access.Name)
 	if err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
 	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(m.JWTSecret), nil
+		return []byte(m.TokenManager.JWTSecret), nil
 	})
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
