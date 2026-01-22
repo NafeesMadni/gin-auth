@@ -18,20 +18,22 @@ import (
 )
 
 type AuthController struct {
-	DB               *gorm.DB
-	EmailManager     *utils.EmailManager
-	TokenManager     *utils.TokenManager
-	CookieConfig     *config.CookieConfig
-	SignupVerifyPath string
+	DB                *gorm.DB
+	EmailManager      *utils.EmailManager
+	TokenManager      *utils.TokenManager
+	CookieConfig      *config.CookieConfig
+	SignupSessionPath string
+	LoginSessionPath  string
 }
 
-func NewAuthController(db *gorm.DB, emailManager *utils.EmailManager, tokenManager *utils.TokenManager, signupVerifyPath string) *AuthController {
+func NewAuthController(db *gorm.DB, emailManager *utils.EmailManager, tokenManager *utils.TokenManager) *AuthController {
 	return &AuthController{
-		DB:               db,
-		EmailManager:     emailManager,
-		TokenManager:     tokenManager,
-		SignupVerifyPath: signupVerifyPath,
-		CookieConfig:     tokenManager.CookieConfig,
+		DB:                db,
+		EmailManager:      emailManager,
+		TokenManager:      tokenManager,
+		CookieConfig:      tokenManager.CookieConfig,
+		SignupSessionPath: config.GetEnvAsStr("SIGNUP_SESSION_PATH", "/signup/otp"),
+		LoginSessionPath:  config.GetEnvAsStr("LOGIN_SESSION_PATH", "/login/otp"),
 	}
 }
 
@@ -63,15 +65,15 @@ func (a *AuthController) Signup(c *gin.Context) {
 	}
 
 	signupID := uuid.New().String() // Unique ID for specific attempt
-	code := a.EmailManager.GenerateVerificationCode()
-	expirationMinutes := a.EmailManager.Config.CodeExp
+	otpCode := a.EmailManager.GenerateVerificationCode()
+	expMinutes := a.EmailManager.Config.CodeExp
 
 	newUser := models.User{
-		Email:            body.Email,
-		Password:         string(hash),
-		SignupID:         signupID,
-		VerificationCode: code,
-		CodeExpiresAt:    time.Now().Add(time.Duration(expirationMinutes) * time.Minute),
+		Email:         body.Email,
+		Password:      string(hash),
+		SignupID:      signupID,
+		OTPCode:       otpCode,
+		CodeExpiresAt: time.Now().Add(time.Duration(expMinutes) * time.Minute),
 	}
 
 	result := a.DB.Create(&newUser)
@@ -82,12 +84,12 @@ func (a *AuthController) Signup(c *gin.Context) {
 	}
 
 	// Set a "Signup-Session" cookie in the user's browser
-	c.SetCookie("Signup-Session", signupID, 600, a.CookieConfig.Domain, a.SignupVerifyPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
+	c.SetCookie("Signup-Session", signupID, expMinutes*60, a.CookieConfig.Domain, a.SignupSessionPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
 
 	// Send the email in a background goroutine so the response isn't slow
-	go a.EmailManager.SendSignupOTP(newUser.Email, code)
+	go a.EmailManager.SendSignupOTP(newUser.Email, otpCode)
 
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Please check your email for the verification code. The code will expires in %d minutes.", expirationMinutes), "signup_session": signupID})
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Please check your email for the verification code. The code will expires in %d minutes.", expMinutes), "signup_session": signupID})
 }
 
 func (a *AuthController) Login(c *gin.Context) {
@@ -157,46 +159,42 @@ func (a *AuthController) RequestLoginCode(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
 		return
 	}
-
 	var user models.User
-	if err := a.DB.Where("email = ?", body.Email).First(&user).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Account not found"})
+	err := a.DB.Where("email = ?", body.Email).First(&user).Error
+
+	// To prevent user enumeration, we will always return a success-like response.
+	// The actual OTP generation and sending will only happen if the user exists and is verified.
+	challengeID := uuid.New().String()
+	expMinutes := a.EmailManager.Config.CodeExp
+
+	if err == nil && user.IsVerified {
+		otpCode := a.EmailManager.GenerateVerificationCode()
+		lc := models.LoginChallenge{
+			Email:         body.Email,
+			ChallengeID:   challengeID,
+			OTPCode:       otpCode,
+			CodeExpiresAt: time.Now().Add(time.Duration(expMinutes) * time.Minute),
+		}
+
+		if dbErr := a.DB.Create(&lc).Error; dbErr != nil {
+			// Use a more specific error message and appropriate status code.
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create login challenge"})
 			return
 		}
+
+		go a.EmailManager.SendLoginOTP(lc.Email, otpCode)
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		// A real database error occurred, other than not finding the user.
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
+	// For non-existent or unverified users, we proceed without creating a DB record or sending an email.
+	// The subsequent OTP verification will fail because the challengeID won't be found in the database, which is the desired behavior.
 
-	if !user.IsVerified {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Email is not verified"})
-		return
-	}
+	c.SetCookie("Login-Session", challengeID, expMinutes*60, a.CookieConfig.Domain, a.LoginSessionPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
 
-	// --- Generate Login Challenge ---
-	challengeID := uuid.New().String()
-	code := a.EmailManager.GenerateVerificationCode()
-	expMinutes := a.EmailManager.Config.CodeExp
-
-	lc := models.LoginChallenge{
-		Email:            body.Email,
-		ChallengeID:      challengeID,
-		VerificationCode: code,
-		CodeExpiresAt:    time.Now().Add(time.Duration(expMinutes) * time.Minute),
-	}
-
-	result := a.DB.Create(&lc)
-
-	if result.Error != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to send OTP!"})
-		return
-	}
-
-	c.SetCookie("Login-Session", challengeID, 600, a.CookieConfig.Domain, a.SignupVerifyPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
-
-	go a.EmailManager.SendLoginOTP(lc.Email, code)
 	c.JSON(http.StatusOK, gin.H{
-		"message":       fmt.Sprintf("Verification code sent to %s. Expires in %d minutes.", body.Email, expMinutes),
+		"message":       fmt.Sprintf("If an account with email %s exists, a verification code has been sent. It expires in %d minutes.", body.Email, expMinutes),
 		"login_session": challengeID,
 	})
 }

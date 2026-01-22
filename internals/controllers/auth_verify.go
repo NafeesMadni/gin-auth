@@ -58,7 +58,7 @@ func (v *VerificationController) VerifyEmail(c *gin.Context) {
 		return
 	}
 
-	if user.VerificationCode != body.Code {
+	if user.OTPCode != body.Code {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid code"})
 		return
 	}
@@ -113,8 +113,8 @@ func (v *VerificationController) ResendVerificationCode(c *gin.Context) {
 	newCode := v.EmailManager.GenerateVerificationCode()
 
 	v.DB.Model(&user).Updates(models.User{
-		VerificationCode: newCode,
-		CodeExpiresAt:    time.Now().Add(time.Duration(v.EmailManager.Config.CodeExp) * time.Minute),
+		OTPCode:       newCode,
+		CodeExpiresAt: time.Now().Add(time.Duration(v.EmailManager.Config.CodeExp) * time.Minute),
 	})
 
 	go v.EmailManager.SendSignupOTP(user.Email, newCode)
