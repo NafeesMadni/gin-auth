@@ -18,22 +18,26 @@ import (
 )
 
 type AuthController struct {
-	DB                *gorm.DB
-	EmailManager      *utils.EmailManager
-	TokenManager      *utils.TokenManager
-	CookieConfig      *config.CookieConfig
-	SignupSessionPath string
-	LoginSessionPath  string
+	DB                 *gorm.DB
+	EmailManager       *utils.EmailManager
+	TokenManager       *utils.TokenManager
+	CookieConfig       *config.CookieConfig
+	SignupSessionPath  string
+	LoginSessionPath   string
+	SignupSessionExpAt int
+	LoginSessionExpAt  int
 }
 
 func NewAuthController(db *gorm.DB, emailManager *utils.EmailManager, tokenManager *utils.TokenManager) *AuthController {
 	return &AuthController{
-		DB:                db,
-		EmailManager:      emailManager,
-		TokenManager:      tokenManager,
-		CookieConfig:      tokenManager.CookieConfig,
-		SignupSessionPath: config.GetEnvAsStr("SIGNUP_SESSION_PATH", "/signup/otp"),
-		LoginSessionPath:  config.GetEnvAsStr("LOGIN_SESSION_PATH", "/login/otp"),
+		DB:                 db,
+		EmailManager:       emailManager,
+		TokenManager:       tokenManager,
+		CookieConfig:       tokenManager.CookieConfig,
+		SignupSessionPath:  config.GetEnvAsStr("SIGNUP_SESSION_PATH", "/signup/otp"),
+		LoginSessionPath:   config.GetEnvAsStr("LOGIN_SESSION_PATH", "/login/otp"),
+		SignupSessionExpAt: config.GetEnvAsInt("SIGNUP_SESSION_EXPIRATION", 30, true),
+		LoginSessionExpAt:  config.GetEnvAsInt("LOGIN_SESSION_EXPIRATION", 30, true),
 	}
 }
 
@@ -84,7 +88,7 @@ func (a *AuthController) Signup(c *gin.Context) {
 	}
 
 	// Set a "Signup-Session" cookie in the user's browser
-	c.SetCookie("Signup-Session", signupID, expMinutes*60, a.CookieConfig.Domain, a.SignupSessionPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
+	c.SetCookie("Signup-Session", signupID, a.SignupSessionExpAt*60, a.CookieConfig.Domain, a.SignupSessionPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
 
 	// Send the email in a background goroutine so the response isn't slow
 	go a.EmailManager.SendSignupOTP(newUser.Email, otpCode)
@@ -165,15 +169,18 @@ func (a *AuthController) RequestLoginCode(c *gin.Context) {
 	// To prevent user enumeration, we will always return a success-like response.
 	// The actual OTP generation and sending will only happen if the user exists and is verified.
 	challengeID := uuid.New().String()
-	expMinutes := a.EmailManager.Config.CodeExp
+	codeExpAt := a.EmailManager.Config.CodeExp
 
 	if err == nil && user.IsVerified {
 		otpCode := a.EmailManager.GenerateVerificationCode()
+
 		lc := models.LoginChallenge{
-			Email:         body.Email,
-			ChallengeID:   challengeID,
-			OTPCode:       otpCode,
-			CodeExpiresAt: time.Now().Add(time.Duration(expMinutes) * time.Minute),
+			UserID:          user.ID,
+			Email:           body.Email,
+			ChallengeID:     challengeID,
+			OTPCode:         otpCode,
+			CodeExpiresAt:   time.Now().Add(time.Duration(codeExpAt) * time.Minute),
+			SessionExpireAt: time.Now().Add(time.Duration(a.LoginSessionExpAt) * time.Minute),
 		}
 
 		if dbErr := a.DB.Create(&lc).Error; dbErr != nil {
@@ -191,10 +198,10 @@ func (a *AuthController) RequestLoginCode(c *gin.Context) {
 	// For non-existent or unverified users, we proceed without creating a DB record or sending an email.
 	// The subsequent OTP verification will fail because the challengeID won't be found in the database, which is the desired behavior.
 
-	c.SetCookie("Login-Session", challengeID, expMinutes*60, a.CookieConfig.Domain, a.LoginSessionPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
+	c.SetCookie("Login-Session", challengeID, a.LoginSessionExpAt, a.CookieConfig.Domain, a.LoginSessionPath, a.CookieConfig.IsSecure, a.CookieConfig.HttpOnly)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":       fmt.Sprintf("If an account with email %s exists, a verification code has been sent. It expires in %d minutes.", body.Email, expMinutes),
+		"message":       fmt.Sprintf("If an account with email %s exists, a verification code has been sent. It expires in %d minutes.", body.Email, codeExpAt),
 		"login_session": challengeID,
 	})
 }

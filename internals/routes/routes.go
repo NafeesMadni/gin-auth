@@ -51,7 +51,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	authCtrl := controllers.NewAuthController(db, emailManager, tokenManager)
 	mfaCtrl := controllers.NewMFAController(db, tokenManager, appName, encryptionKey)
 	tokenCtrl := controllers.NewTokenController(db, tokenManager)
-	verifyCtrl := controllers.NewVerificationController(db, emailManager)
+	verifyCtrl := controllers.NewVerificationController(db, emailManager, tokenManager)
 
 	public := r.Group("/")
 	{
@@ -72,16 +72,22 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			// Set SIGNUP_SESSION_PATH to "/signup/otp" in your .env
 			otp := signup.Group("/otp")
 			{
-				otp.POST("/verify", verifyCtrl.VerifyEmail)
-				otp.POST("/resend", verifyCtrl.ResendVerificationCode)
+				otp.POST("/verify", verifyCtrl.VerifySignup)
+				otp.POST("/resend", verifyCtrl.ResendSignupOTP)
 			}
 		}
 		login := public.Group("login")
 		{
 			login.POST("/", authCtrl.Login)
-			// otp := login.Group("/otp")
-			// {
-			// }
+
+			// Verification Sub-group
+			// Path Prefix: /login/otp
+			// Set LOGIN_SESSION_PATH to "/login/otp" in your .env
+			otp := login.Group("/otp")
+			{
+				otp.POST("/verify", verifyCtrl.VerifyLogin)
+				otp.POST("/resend", verifyCtrl.ResendLoginOTP)
+			}
 		}
 		public.POST("/request-login-otp", authCtrl.RequestLoginCode)
 		public.POST("/2fa/login-verify", mfaCtrl.LoginVerify2FA)

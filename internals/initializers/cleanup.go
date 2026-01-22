@@ -31,9 +31,13 @@ func StartBlacklistCleanup() {
 			// 3. Purge unverified users older than a certain threshold (e.g., 24 Hours)
 			userResult := DB.Unscoped().Where("is_verified = ? AND created_at < ?", false, time.Now().Add(-24*time.Hour)).Delete(&models.User{})
 
-			if sessionResult.RowsAffected > 0 || blacklistResult.RowsAffected > 0 || userResult.RowsAffected > 0 {
-				log.Printf("Janitor: Cleaned %d sessions and %d blacklisted tokens and %d unverified users",
-					sessionResult.RowsAffected, blacklistResult.RowsAffected, userResult.RowsAffected)
+			// 4. Purge Expired Login Challenges
+			// Logic: Once CodeExpiresAt is past, the challenge is useless and cannot be verified.
+			challengeResult := DB.Unscoped().Where("session_expire_at < ?", time.Now()).Delete(&models.LoginChallenge{})
+
+			if sessionResult.RowsAffected > 0 || blacklistResult.RowsAffected > 0 || userResult.RowsAffected > 0 || challengeResult.RowsAffected > 0 {
+				log.Printf("Janitor: Cleaned %d sessions, %d blacklisted tokens, %d unverified users, and %d login challenges",
+					sessionResult.RowsAffected, blacklistResult.RowsAffected, userResult.RowsAffected, challengeResult.RowsAffected)
 			} else {
 				log.Printf("Janitor: No expired tokens found")
 			}
