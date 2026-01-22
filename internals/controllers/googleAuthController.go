@@ -52,14 +52,14 @@ func (g *GoogleAuthController) Callback(c *gin.Context) {
 	// Use the config to exchange the code for a token
 	token, err := g.Config.Exchange(context.Background(), code)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid exchange code"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to exchange token"})
 		return
 	}
 
 	// Fetch user info
 	response, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Google API unreachable"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user info"})
 		return
 	}
 	defer response.Body.Close()

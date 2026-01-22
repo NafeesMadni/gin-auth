@@ -30,7 +30,6 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 		},
 	)
 
-	// JWT & Cookie Token Manager
 	tokenManager := utils.NewTokenManager(
 		db,
 		&config.CookieConfig{
@@ -39,14 +38,30 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			HttpOnly: true, // Always HttpOnly set to true for security
 		},
 		JWTSecret,
-		config.GetEnvAsInt("ACCESS_TOKEN_EXPIRATION_SECONDS", 900, true),    // Default 15 mins
-		config.GetEnvAsInt("REFRESH_TOKEN_EXPIRATION_SECONDS", 86400, true), // Default 24 hours
-		config.GetEnvAsStr("ACCESS_TOKEN_PATH", ""),
-		config.GetEnvAsStr("REFRESH_TOKEN_PATH", "/auth/refresh"), // specific to the route path of tokenCtrl.RefreshToken endpont
+		utils.CookieSetting{
+			Name:   "Authorization",
+			Path:   config.GetEnvAsStr("ACCESS_TOKEN_PATH", ""),
+			MaxAge: config.GetEnvAsInt("ACCESS_TOKEN_EXPIRATION_SECONDS", 900, true),
+		},
+		utils.CookieSetting{
+			Name:   "RefreshToken",
+			Path:   config.GetEnvAsStr("REFRESH_TOKEN_PATH", "/auth/refresh"),
+			MaxAge: config.GetEnvAsInt("REFRESH_TOKEN_EXPIRATION_SECONDS", 86400, true),
+		},
+		utils.CookieSetting{
+			Name:   "Signup-Session",
+			Path:   config.GetEnvAsStr("SIGNUP_SESSION_PATH", "/signup/otp"),
+			MaxAge: config.GetEnvAsInt("SIGNUP_SESSION_EXPIRATION_SECONDS", 1800, true),
+		},
+		utils.CookieSetting{
+			Name:   "Login-Session",
+			Path:   config.GetEnvAsStr("LOGIN_SESSION_PATH", "/login/otp"),
+			MaxAge: config.GetEnvAsInt("LOGIN_SESSION_EXPIRATION_SECONDS", 1800, true),
+		},
 	)
 
 	// Instantiate the "Class"
-	authMiddleware := middleware.NewRequireAuthMiddleware(db, JWTSecret)
+	authMiddleware := middleware.NewRequireAuthMiddleware(db, tokenManager)
 	googleAuthCtrl := controllers.NewGoogleAuthController(db, tokenManager)
 	authCtrl := controllers.NewAuthController(db, emailManager, tokenManager)
 	mfaCtrl := controllers.NewMFAController(db, tokenManager, appName, encryptionKey)
