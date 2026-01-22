@@ -136,6 +136,7 @@ func (a *AuthController) Login(c *gin.Context) {
 	// Standard Login (No 2FA): Create Session & Set Cookies
 	tokenMetadata, err := a.TokenManager.GenerateAndSetToken(c, user.ID)
 	if err != nil {
+		a.TokenManager.ClearJWTCookies(c)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
 		return
 	}
@@ -169,7 +170,7 @@ func (a *AuthController) RequestLoginCode(c *gin.Context) {
 			ChallengeID:     challengeID,
 			OTPCode:         otpCode,
 			CodeExpiresAt:   time.Now().Add(time.Duration(codeExpAt) * time.Minute),
-			SessionExpireAt: time.Now().Add(time.Duration(a.TokenManager.Login.MaxAge) * time.Minute),
+			SessionExpireAt: time.Now().Add(time.Duration(a.TokenManager.Login.MaxAge) * time.Second),
 		}
 
 		if dbErr := a.DB.Create(&lc).Error; dbErr != nil {

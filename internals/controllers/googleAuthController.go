@@ -80,6 +80,7 @@ func (g *GoogleAuthController) Callback(c *gin.Context) {
 
 	tokenMetadata, err := g.TokenManager.GenerateAndSetToken(c, user.ID)
 	if err != nil {
+		g.TokenManager.ClearJWTCookies(c)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
 		return
 	}

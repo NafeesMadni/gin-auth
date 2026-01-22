@@ -80,9 +80,10 @@ func (v *VerificationController) VerifySignup(c *gin.Context) {
 	}
 
 	v.DB.Model(&user).Updates(map[string]interface{}{
-		"IsVerified":    true,
-		"OTPCode":       "",
-		"CodeExpiresAt": time.Time{},
+		"is_verified":     true,
+		"otp_code":        "",
+		"signup_id":       "",
+		"code_expires_at": time.Time{},
 	})
 
 	v.TokenManager.ClearSignupSession(c)
@@ -135,7 +136,7 @@ func (v *VerificationController) VerifyLogin(c *gin.Context) {
 	// Standard Token Generation
 	tokenMetadata, err := v.TokenManager.GenerateAndSetToken(c, lc.UserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate tokens"})
+		v.abortWithClear(c, http.StatusInternalServerError, map[string]any{"error": "Failed to generate tokens"}, false)
 		return
 	}
 
@@ -164,7 +165,7 @@ func (v *VerificationController) ResendSignupOTP(c *gin.Context) {
 	if err := v.DB.Where("email = ? AND signup_id = ?", body.Email, cookieID).First(&user).Error; err != nil {
 		// Security: Use a generic success message to prevent account enumeration
 		// This way, attackers cannot determine if an email is registered or not
-		v.abortWithClear(c, http.StatusOK, map[string]any{"error": "If the session is valid, a new code has been sent."}, true)
+		v.abortWithClear(c, http.StatusOK, map[string]any{"message": "If the session is valid, a new code has been sent."}, true)
 		return
 	}
 
@@ -214,7 +215,7 @@ func (v *VerificationController) ResendLoginOTP(c *gin.Context) {
 	if err := v.DB.Where("email = ? AND challenge_id = ?", body.Email, cookieID).First(&lc).Error; err != nil {
 		// Security: Use a generic success message to prevent account enumeration
 		// This way, attackers cannot determine if an email is registered or not
-		v.abortWithClear(c, http.StatusOK, map[string]any{"error": "If the session is valid, a new code has been sent."}, false)
+		v.abortWithClear(c, http.StatusOK, map[string]any{"message": "If the session is valid, a new code has been sent."}, false)
 		return
 	}
 

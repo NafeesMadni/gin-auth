@@ -129,6 +129,7 @@ func (m *MFAController) LoginVerify2FA(c *gin.Context) {
 	// Success! Create the final session and set JWT cookies
 	tokenMetadata, err := m.TokenManager.GenerateAndSetToken(c, user.ID)
 	if err != nil {
+		m.TokenManager.ClearJWTCookies(c)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
 		return
 	}
