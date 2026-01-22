@@ -15,7 +15,6 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 
 	// Load environment variables
 
-	signup_verify_path := config.GetEnvAsStr("SIGNUP_SESSION_PATH", "/signup/otp")
 	appName := config.GetEnvAsStr("APP_NAME", "Gin-Auth")
 	encryptionKey := config.GetEnv("ENCRYPTION_KEY")
 	JWTSecret := config.GetEnv("JWT_SECRET_KEY")
@@ -49,10 +48,10 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	// Instantiate the "Class"
 	authMiddleware := middleware.NewRequireAuthMiddleware(db, JWTSecret)
 	googleAuthCtrl := controllers.NewGoogleAuthController(db, tokenManager)
-	authCtrl := controllers.NewAuthController(db, emailManager, tokenManager, signup_verify_path)
+	authCtrl := controllers.NewAuthController(db, emailManager, tokenManager)
 	mfaCtrl := controllers.NewMFAController(db, tokenManager, appName, encryptionKey)
 	tokenCtrl := controllers.NewTokenController(db, tokenManager)
-	verifyCtrl := controllers.NewVerificationController(db, emailManager)
+	verifyCtrl := controllers.NewVerificationController(db, emailManager, tokenManager)
 
 	public := r.Group("/")
 	{
@@ -70,14 +69,27 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 
 			// Verification Sub-group
 			// Path Prefix: /signup/otp
-			// Set SignupPath to "/signup/otp" in your .env
+			// Set SIGNUP_SESSION_PATH to "/signup/otp" in your .env
 			otp := signup.Group("/otp")
 			{
-				otp.POST("/verify", verifyCtrl.VerifyEmail)
-				otp.POST("/resend", verifyCtrl.ResendVerificationCode)
+				otp.POST("/verify", verifyCtrl.VerifySignup)
+				otp.POST("/resend", verifyCtrl.ResendSignupOTP)
 			}
 		}
-		public.POST("/login", authCtrl.Login)
+		login := public.Group("login")
+		{
+			login.POST("/", authCtrl.Login)
+
+			// Verification Sub-group
+			// Path Prefix: /login/otp
+			// Set LOGIN_SESSION_PATH to "/login/otp" in your .env
+			otp := login.Group("/otp")
+			{
+				otp.POST("/verify", verifyCtrl.VerifyLogin)
+				otp.POST("/resend", verifyCtrl.ResendLoginOTP)
+			}
+		}
+		public.POST("/request-login-otp", authCtrl.RequestLoginCode)
 		public.POST("/2fa/login-verify", mfaCtrl.LoginVerify2FA)
 	}
 

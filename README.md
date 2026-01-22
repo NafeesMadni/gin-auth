@@ -7,15 +7,16 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 ### 🚀 Key Features
 
 * **Modular Architecture:** Utilizes **Dependency Injection** to manage database connections, SMTP configurations, and security secrets across decoupled controller structs.
-* **Session-Bound Signup:** Implements **Signup-Session locking** via path-restricted cookies to prevent verification hijacking and race-condition exploits.
+* **Session-Bound Security:** Implements **Signup/Login Session locking** via path-restricted cookies to prevent verification hijacking and race-condition exploits.
+* **Passwordless Email OTP:** Supports a "Magic Code" login flow that allows users to authenticate via email without a password.
 * **Multi-Factor Authentication (2FA):** Secure TOTP (Time-based One-Time Password) implementation with AES-256-GCM encryption for secrets at rest.
-* **Path-Restricted Cookies:** Enhances security by restricting sensitive tokens (Refresh, Signup-Session) to specific API paths.
+* **Path-Restricted Cookies:** Enhances security by restricting sensitive tokens (Refresh, Signup, and Login Sessions) to specific API paths to minimize cross-endpoint leakage.
 * **Two-Step Secure Login:** Enhanced `/login` flow that detects MFA status and requires a secondary verification step via `/2fa/login-verify` before issuing session cookies.
 * **Email Verification:** Integration with Gmail SMTP to verify accounts via OTP with intelligent **Upsert-aware** signup logic for expired codes.
 * **Google OAuth2:** Seamless social login integration handled via a dedicated controller.
 * **Refresh Token Rotation:** High-security session management that rotates tokens on every refresh to prevent replay attacks.
 * **Hybrid Logout:** Supports stateful session revocation and stateless JTI blacklisting.
-* **Automated Maintenance:** Background "janitor" goroutine to purge expired sessions, blacklist entries, and abandoned unverified accounts.
+* **Automated Maintenance:** Background "janitor" goroutine to purge expired sessions, blacklist entries, login challenges, and abandoned unverified accounts.
 
 ---
 
@@ -35,15 +36,15 @@ This repository contains a robust, production-ready **Go (Gin)** authentication 
 ```text
 .
 ├── internals/
-│   ├── config/       # Low-Level shared configuration (CookieConfig, Env helpers)
-│   ├── controllers/  # Struct-based handlers (Auth, MFA, Google, Token)
-│   ├── initializers/ # DB initialization, load Env, and Background Janitor service
-│   ├── middleware/   # JWT/MFA verification and Blacklist checking
-│   ├── models/       # GORM schemas (User, Session, Blacklist)
-│   └── utils/        # TokenManager, Crypto, and Email logic
-├── main.go           # Application entry point
-├── .air.toml         # Hot reload configuration
-└── .env.example      # Environment variables 
+│   ├── config/       # Low-Level shared configuration (CookieConfig, Env helpers)
+│   ├── controllers/  # Struct-based handlers (Auth, MFA, Google, Token, Verification)
+│   ├── initializers/ # DB initialization, load Env, and Background Janitor service
+│   ├── middleware/   # JWT/MFA verification and Blacklist checking
+│   ├── models/       # GORM schemas (User, Session, Blacklist, LoginChallenge)
+│   └── utils/        # TokenManager, Crypto, and Email logic
+├── main.go           # Application entry point
+└── .env              # Environment configuration 
+
 ```
 
 ---
@@ -90,7 +91,6 @@ go run main.go
 
 ```
 
-
 ---
 
 ### 🧪 API Endpoints
@@ -102,17 +102,20 @@ Managed by `AuthController`, `VerificationController`, and `MFAController`.
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/` | **Health Check**: System status and metadata. |
-| `POST` | `/signup` | **Upsert-aware**: Creates and delete unverified accounts & sets Signup cookie. |
-| `POST` | `/signup/otp/verify` | Validates email OTP against the specific `SignupID` session. |
-| `POST` | `/signup/otp/resend` | Requests new code for the **active** signup session. |
-| `POST` | `/login` | Checks password. Returns `mfa_required` if 2FA is active. |
-| `POST` | `/2fa/login-verify` | Validates Authenticator App code to finalize session. |
+| `POST` | `/signup` | **Upsert-aware**: Creates/Updates unverified accounts & sets Signup cookie. |
+| `POST` | `/signup/otp/verify` | Validates email OTP against the `SignupID` session. |
+| `POST` | `/signup/otp/resend` | Requests new code for the **active** signup session (1-min cooldown). |
+| `POST` | `/request-login-otp` | Initiates Passwordless Login; creates a `LoginChallenge` record. |
+| `POST` | `/login/otp/verify` | Validates Login OTP. |
+| `POST` | `/login/otp/resend` | Refreshes the OTP and browser cookie for the active login session. |
+| `POST` | `/login` | Password login. Returns `mfa_required` if 2FA is active. |
+| `POST` | `/2fa/login-verify` | Validates Authenticator App code to finalize the session.  |
 
 #### **Protected Routes (Requires JWT)**
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/logout` | Revokes DB session and blacklists JTI. |
+| `POST` | `/logout` | Revokes DB session, clears cookies, and blacklists JTI. |
 | `GET` | `/validate` | Verifies current session and returns user data. |
 | `POST` | `/2fa/setup` | Generates a new TOTP secret and QR code. |
 | `POST` | `/2fa/activate` | Verifies initial TOTP code to enable MFA on account. |
@@ -133,9 +136,9 @@ Managed by `GoogleAuthController` and `TokenController`.
 
 The **Background Janitor** goroutine runs every `CLEANUP_INTERVAL_MINUTES` to ensure the database remains optimized:
 
-1. **Session Purge:** Removes rows where `expires_at < now`.
-2. **Blacklist Purge:** Cleans JTIs once the access token's lifespan is over.
-3. **Ghost Account Cleanup:** Deletes users who haven't verified their email within 24 hours.
+1. **Login Challenges:** Purges abandoned OTP attempts where `session_expire_at < now`.
+2. **Sessions & Blacklist:** Cleans up expired JWT sessions and JTI entries.
+3. **Ghost Accounts:** Deletes users who haven't verified signup within 24 hours.
 
 
 ---
