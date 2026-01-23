@@ -58,7 +58,7 @@ func (g *GoogleAuthController) Callback(c *gin.Context) {
 	}
 
 	// Fetch Detailed User Info
-	resp, err := http.Get("https://www.googleapis.com/oauth2/v3/userinfo?access_token=" + token.AccessToken)
+	resp, err := g.Config.Client(context.Background(), token).Get("https://www.googleapis.com/oauth2/v3/userinfo")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user info"})
 		return
@@ -72,7 +72,11 @@ func (g *GoogleAuthController) Callback(c *gin.Context) {
 		Picture       string `json:"picture"`
 		Name          string `json:"name"`
 	}
-	json.NewDecoder(resp.Body).Decode(&googleUser)
+
+	if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode user info"})
+		return
+	}
 
 	if !googleUser.EmailVerified {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Google email not verified"})
@@ -94,7 +98,10 @@ func (g *GoogleAuthController) Callback(c *gin.Context) {
 				Avatar:     googleUser.Picture,
 				FullName:   googleUser.Name,
 			}
-			g.DB.Create(&user)
+			if err := g.DB.Create(&user).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+				return
+			}
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 			return
@@ -103,7 +110,7 @@ func (g *GoogleAuthController) Callback(c *gin.Context) {
 		// Case B: User Exists
 		// Optional: Update their GoogleID if they previously signed up via password
 		// This "links" their existing email account to their Google profile
-		g.DB.Model(&user).Updates(map[string]interface{}{
+		if err := g.DB.Model(&user).Updates(map[string]interface{}{
 			"google_id": googleUser.Sub,
 			"avatar":    googleUser.Picture, // Sync latest profile picture
 			"full_name": googleUser.Name,
@@ -117,7 +124,10 @@ func (g *GoogleAuthController) Callback(c *gin.Context) {
 			"otp_code":        "",
 			"signup_id":       "",
 			"code_expires_at": time.Time{},
-		})
+		}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link Google account"})
+			return
+		}
 	}
 
 	// Issue Session Tokens
