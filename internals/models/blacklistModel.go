@@ -8,6 +8,6 @@ import (
 
 type Blacklist struct {
 	gorm.Model
-	Jti       string    `gorm:"unique;index"` // The unique ID of the token
-	ExpiresAt time.Time `gorm:"index"`
+	Jti       string    `gorm:"column:jti;unique;index"`
+	ExpiresAt time.Time `gorm:"column:expires_at;index"`
 }

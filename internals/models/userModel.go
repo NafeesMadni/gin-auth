@@ -8,13 +8,13 @@ import (
 
 type User struct {
 	gorm.Model
-	Email         string `gorm:"uniqueIndex"`
-	Password      string
-	SignupID      string
-	IsVerified    bool `gorm:"default:false"`
-	OTPCode       string
-	CodeExpiresAt time.Time
+	Email         string    `gorm:"column:email;uniqueIndex"`
+	Password      string    `gorm:"column:password"`
+	SignupID      string    `gorm:"column:signup_id"`
+	IsVerified    bool      `gorm:"column:is_verified;default:false"`
+	OTPCode       string    `gorm:"column:otp_code"`
+	CodeExpiresAt time.Time `gorm:"column:code_expires_at"`
 
-	TwoFAEnabled bool   `gorm:"default:false"`
-	TwoFASecret  string `gorm:"default:null"`
+	TwoFAEnabled bool   `gorm:"column:two_fa_enabled;default:false"`
+	TwoFASecret  string `gorm:"column:two_fa_secret;default:null"`
 }
