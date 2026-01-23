@@ -20,7 +20,7 @@ type User struct {
 	TwoFASecret  string `gorm:"column:two_fa_secret;default:null"`
 
 	// OAuth2 / Social Login
-	GoogleID string `gorm:"column:google_id;index"`
+	GoogleID string `gorm:"column:google_id;uniqueIndex"`
 	Avatar   string `gorm:"column:avatar"`
 	FullName string `gorm:"column:full_name"`
 }
