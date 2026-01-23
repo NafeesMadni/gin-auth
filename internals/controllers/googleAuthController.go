@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"gin-auth/internals/config"
 	"gin-auth/internals/models"
@@ -56,34 +57,79 @@ func (g *GoogleAuthController) Callback(c *gin.Context) {
 		return
 	}
 
-	// Fetch user info
-	response, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
+	// Fetch Detailed User Info
+	resp, err := http.Get("https://www.googleapis.com/oauth2/v3/userinfo?access_token=" + token.AccessToken)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user info"})
 		return
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
 
 	var googleUser struct {
-		Email string `json:"email"`
+		Sub           string `json:"sub"` // Unique Google ID
+		Email         string `json:"email"`
+		EmailVerified bool   `json:"email_verified"`
+		Picture       string `json:"picture"`
+		Name          string `json:"name"`
 	}
-	json.NewDecoder(response.Body).Decode(&googleUser)
+	json.NewDecoder(resp.Body).Decode(&googleUser)
 
-	// User persistence logic
-	var user models.User
-	g.DB.Where("email = ?", googleUser.Email).First(&user)
-
-	if user.ID == 0 {
-		user = models.User{Email: googleUser.Email, IsVerified: true}
-		g.DB.Create(&user)
-	}
-
-	tokenMetadata, err := g.TokenManager.GenerateAndSetToken(c, user.ID)
-	if err != nil {
-		g.TokenManager.ClearJWTCookies(c)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate tokens"})
+	if !googleUser.EmailVerified {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Google email not verified"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Logged in via Google successfully", "access_token": tokenMetadata.AccessToken, "refresh_token": tokenMetadata.RefreshToken})
+	// Smart Persistence: Find or Update
+	var user models.User
+	// Try to find by GoogleID first, then by Email
+	result := g.DB.Where("google_id = ? OR email = ?", googleUser.Sub, googleUser.Email).First(&user)
+
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			// Case A: New User
+			user = models.User{
+				Email:      googleUser.Email,
+				GoogleID:   googleUser.Sub,
+				IsVerified: true,
+				Avatar:     googleUser.Picture,
+				FullName:   googleUser.Name,
+			}
+			g.DB.Create(&user)
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
+		}
+	} else {
+		// Case B: User Exists
+		// Optional: Update their GoogleID if they previously signed up via password
+		// This "links" their existing email account to their Google profile
+		g.DB.Model(&user).Updates(map[string]interface{}{
+			"google_id": googleUser.Sub,
+			"avatar":    googleUser.Picture, // Sync latest profile picture
+			"full_name": googleUser.Name,
+
+			// Account Recovery & Linking:
+			// If a user previously initiated a standard email signup but did not complete
+			// verification, logging in via Google acts as an implicit verification.
+			// We synchronize the account state, clear stale OTP data, and promote
+			// the user to 'verified' status based on Google's identity authority.
+			"is_verified":     true,
+			"otp_code":        "",
+			"signup_id":       "",
+			"code_expires_at": time.Time{},
+		})
+	}
+
+	// Issue Session Tokens
+	tokenMetadata, err := g.TokenManager.GenerateAndSetToken(c, user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Token generation failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Welcome " + user.Email,
+		"tokens":  tokenMetadata,
+		"data":    googleUser,
+	})
 }

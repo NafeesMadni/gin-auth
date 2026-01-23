@@ -15,6 +15,12 @@ type User struct {
 	OTPCode       string    `gorm:"column:otp_code"`
 	CodeExpiresAt time.Time `gorm:"column:code_expires_at"`
 
+	// Multi-Factor Authentication
 	TwoFAEnabled bool   `gorm:"column:two_fa_enabled;default:false"`
 	TwoFASecret  string `gorm:"column:two_fa_secret;default:null"`
+
+	// OAuth2 / Social Login
+	GoogleID string `gorm:"column:google_id;index"`
+	Avatar   string `gorm:"column:avatar"`
+	FullName string `gorm:"column:full_name"`
 }
