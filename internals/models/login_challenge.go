@@ -8,11 +8,11 @@ import (
 
 type LoginChallenge struct {
 	gorm.Model
-	UserID          uint
-	Email           string `gorm:"index"`
-	ChallengeID     string `gorm:"uniqueIndex"` // Injected into Login-Session cookie
-	OTPCode         string
-	Attempts        int       `gorm:"default:3"`
-	CodeExpiresAt   time.Time `gorm:"index"`
-	SessionExpireAt time.Time `gorm:"index"`
+	UserID          uint      `gorm:"column:user_id"`
+	Email           string    `gorm:"column:email;index"`
+	ChallengeID     string    `gorm:"column:challenge_id;uniqueIndex"`
+	OTPCode         string    `gorm:"column:otp_code"`
+	Attempts        int       `gorm:"column:attempts;default:3"`
+	CodeExpiresAt   time.Time `gorm:"column:code_expires_at;index"`
+	SessionExpireAt time.Time `gorm:"column:session_expire_at;index"`
 }
