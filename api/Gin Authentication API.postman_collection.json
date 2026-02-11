@@ -1,0 +1,505 @@
+{
+  "info": {
+    "_postman_id": "19f76db1-2be1-4ca7-b936-b70a89a4995e",
+    "name": "Gin Authentication API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "39087661"
+  },
+  "item": [
+    {
+      "name": "Login",
+      "item": [
+        {
+          "name": "With OTP",
+          "item": [
+            {
+              "name": "Request Login OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"email\": \"_valid@gmail.com\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:3000/request-login-otp",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "3000",
+                  "path": [
+                    "request-login-otp"
+                  ]
+                },
+                "description": "Generated from cURL: curl -i -X POST http://localhost:3000/login \\\r\n  -H \"Content-Type: application/json\" \\\r\n  -d '{\r\n    \"email\": \"test@example.com\",\r\n    \"password\": \"password123\"\r\n  }'"
+              },
+              "response": []
+            },
+            {
+              "name": "Verify Login - OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Cookie",
+                    "value": "Login-Session=1ec30fba-097b-492a-9f21-40a44916ea26",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"email\": \"_valid@gmail.com\",\r\n    \"code\": \"otp_code\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:3000/login/otp/verify",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "3000",
+                  "path": [
+                    "login",
+                    "otp",
+                    "verify"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Resend Login - OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Cookie",
+                    "value": "Login-Session=1ec30fba-097b-492a-9f21-40a44916ea26",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"email\": \"_valid@gmail.com\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:3000/login/otp/resend",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "3000",
+                  "path": [
+                    "login",
+                    "otp",
+                    "resend"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Login Endpoint",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"email\": \"_valid@gmail.com\",\r\n    \"password\": \"password123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/login",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "login"
+              ]
+            },
+            "description": "Generated from cURL: curl -i -X POST http://localhost:3000/login \\\r\n  -H \"Content-Type: application/json\" \\\r\n  -d '{\r\n    \"email\": \"test@example.com\",\r\n    \"password\": \"password123\"\r\n  }'"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Login with 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"email\": \"_valid@gmail.com\",\r\n    \"code\": \"otp_code\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/2fa/login-verify",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "2fa",
+                "login-verify"
+              ]
+            },
+            "description": "Generated from cURL: curl -i -X POST http://localhost:3000/login \\\r\n  -H \"Content-Type: application/json\" \\\r\n  -d '{\r\n    \"email\": \"test@example.com\",\r\n    \"password\": \"password123\"\r\n  }'"
+          },
+          "response": []
+        },
+        {
+          "name": "Login with Google",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/auth/google/login",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "auth",
+                "google",
+                "login"
+              ]
+            },
+            "description": "Generated from cURL: curl -i http://localhost:3000/auth/google/login"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Signup",
+      "item": [
+        {
+          "name": "Signup Endpoint",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"email\": \"_valid@gmail.com\",\r\n    \"password\": \"password123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/signup",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "signup"
+              ]
+            },
+            "description": "Generated from cURL: curl -X POST http://localhost:3000/signup \\\r\n  -H \"Content-Type: application/json\" \\\r\n  -d '{\r\n    \"email\": \"test@example.com\",\r\n    \"password\": \"password123\"\r\n  }'"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Signup - OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "Signup-Session=8adb2304-ed21-4927-a9a0-4d7d36bb1505",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"_valid@gmail.com\",\n    \"code\": \"otp_code\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/signup/otp/verify",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "signup",
+                "otp",
+                "verify"
+              ]
+            },
+            "description": "Generated from cURL: curl -X POST http://localhost:8080/verify \\\n     -H \"Content-Type: application/json\" \\\n     -d '{\n           \"email\": \"user@example.com\",\n           \"code\": \"123456\"\n         }'"
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Signup - OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "Signup-Session=3e035269-0d1e-48eb-98f4-379d2119bd0b",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"_valid@gmail.com\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/signup/otp/resend",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "signup",
+                "otp",
+                "resend"
+              ]
+            },
+            "description": "Generated from cURL: curl -X POST http://localhost:3000/resend-verification \\\n     -H \"Content-Type: application/json\" \\\n     -d '{\"email\": \"user@gmail.com\"}'"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Two-Factor Authentication",
+      "item": [
+        {
+          "name": "Setup 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "Authorization=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjkxNzIzMzYsImp0aSI6ImU4YWY0MzNkLWE2MDQtNGEzNC1hMDUyLWFkNWUyNDhjNjcxOSIsInN1YiI6MX0.ugcoyKE7__g9QWaiaYsdK-JSRZ3yCRU3j1KtXPXQHvA"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/2fa/setup",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "2fa",
+                "setup"
+              ]
+            },
+            "description": "Generated from cURL: curl -X POST http://localhost:3000/2fa/setup \\\r\n     -H \"Authorization: Bearer <JWT_TOKEN>\""
+          },
+          "response": []
+        },
+        {
+          "name": "Activate 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "Authorization=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjkxNzIzMzYsImp0aSI6ImU4YWY0MzNkLWE2MDQtNGEzNC1hMDUyLWFkNWUyNDhjNjcxOSIsInN1YiI6MX0.ugcoyKE7__g9QWaiaYsdK-JSRZ3yCRU3j1KtXPXQHvA"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"code\": \"otp_code\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/2fa/activate",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "2fa",
+                "activate"
+              ]
+            },
+            "description": "Generated from cURL: curl -X POST http://localhost:3000/2fa/activate \\\r\n     -H \"Authorization: Bearer <JWT_TOKEN>\" \\\r\n     -H \"Content-Type: application/json\" \\\r\n     -d '{\"code\": \"123456\"}'"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Validate (Access Protected Route)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "Authorization=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjkyMDYyNzYsImp0aSI6ImYxODZmMjFiLTY4OTUtNGJkZS04NTNkLTMzNDM1NDQxMWRmMiIsInN1YiI6MX0.b1Ip8dNG97ioW6fP_eAHoLoQK4uqm8DIRbiOZxiHGKk"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/validate",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "validate"
+          ]
+        },
+        "description": "Generated from cURL: curl -X GET http://localhost:3000/validate \\\r\n  --cookie \"Authorization=YOUR_TOKEN_HERE\""
+      },
+      "response": []
+    },
+    {
+      "name": "Logout User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "Authorization=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Njg5NDU2MDMsImp0aSI6Ijg4NWZjZjA3LWI2OWMtNDBlZC04NTBlLTZiZjdmMWIyYzIxNCIsInN1YiI6MX0.GzuuFS3PsaTLYd20BQvEIvYys6Loe1dK76-L-ylQsE4"
+          },
+          {
+            "key": "Cookie",
+            "value": "RefreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Njk0NjQwMDMsInN1YiI6MX0.2GQTv4DBMucgMxkiYa2IAI1TESP0wxan1hItHffYuBY",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/logout",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "logout"
+          ]
+        },
+        "description": "Generated from cURL: curl -i -X POST http://localhost:3000/logout \\\r\n  --cookie \"Authorization=YOUR_TOKEN_HERE\""
+      },
+      "response": []
+    },
+    {
+      "name": "Referesh JWT Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "RefreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Njk0NjM1OTEsInN1YiI6MX0.G0RI6HmzlclRaCj_Fmh6heDCHI-yzoHEhagFNZsllys"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/auth/refresh",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "auth",
+            "refresh"
+          ]
+        },
+        "description": "Generated from cURL: curl -i -X GET http://localhost:3000/auth/refresh \\\r\n  --cookie \"RefreshToken=YOUR_ACTUAL_REFRESH_TOKEN_HERE\""
+      },
+      "response": []
+    },
+    {
+      "name": "home root",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000"
+        }
+      },
+      "response": []
+    }
+  ]
+}
