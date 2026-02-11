@@ -13,7 +13,6 @@ func init() {
 }
 
 func main() {
-	// Pass the DB instance to the router setup
 	db := initializers.DB
 	r := routes.SetupRouter(db)
 

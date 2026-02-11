@@ -6,6 +6,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// User represents the core identity entity, supporting both local and OAuth2 authentication.
+// Tracks registration state via SignupID (Signup-Session) until email verification is complete.
+// Stores 2FA configuration (TOTP) and social profile metadata for Google-linked accounts.
 type User struct {
 	gorm.Model
 	Email         string    `gorm:"column:email;uniqueIndex"`
